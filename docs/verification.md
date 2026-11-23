@@ -24,10 +24,15 @@ This video verifies the demonstrated simulator flow. It does not verify live Tel
 
 The official Even Hub CLI 0.2.0 created a 39,680-byte local `.ehpk` at the time of the first package check, using SDK 0.0.16 and minimum Even App 2.2.10. The pack script supplies an explicit backend origin and matching network permission whitelist. The generated default package points to this computer's localhost and is for simulator development; it is not a verified phone/device deployment.
 
+## Public source and media
+
+Published to the public repository [hudbeard/EvenRealitiesTelegram](https://github.com/hudbeard/EvenRealitiesTelegram). The implementation commit is [20731e2](https://github.com/hudbeard/EvenRealitiesTelegram/commit/20731e274c8ace556a8b2af1693bb76fa73ed38a). An unauthenticated Git fetch retrieved that commit and the local tracked tree matched it with no changes. The source upload contains 35 selected files, including the reproducible manifests and demo evidence, and excludes credentials, local data, logs, generated builds, and dependency directories.
+
+The [public MP4](https://raw.githubusercontent.com/hudbeard/EvenRealitiesTelegram/main/docs/media/fieldline-demo.mp4) returned HTTP 200 when checked. GitHub serves it as application/octet-stream, so some browsers download it. It is a publicly accessible demo file; acceptance by DoraHacks' final video URL field has not yet been checked. If that field requires a video platform URL, upload the same verified MP4 to a supported host before submitting.
+
 ## Still required
 
 - Live Telegram configuration, wearer pairing, and verified request/reply receipt in the consenting group.
-- Verification of the published GitHub tree and public demo link after upload.
 - DoraHacks registration/account details, final form completion, and verified successful submission.
 - Hosted HTTPS backend and hardware tests if a deployable device package is provided.
 

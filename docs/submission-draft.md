@@ -3,6 +3,12 @@
 Working name: Fieldline (availability not checked).
 Track: Messaging & News.
 
+Public source: https://github.com/hudbeard/EvenRealitiesTelegram
+
+Public demo file: https://raw.githubusercontent.com/hudbeard/EvenRealitiesTelegram/main/docs/media/fieldline-demo.mp4
+
+The public MP4 returned HTTP 200, but its acceptance by the final DoraHacks form has not been verified. It is an 86-second synthetic-data simulator walkthrough, not a live Telegram delivery demonstration.
+
 ## Description for final review
 
 Fieldline helps event crews and small teams respond to Telegram coordination requests while keeping their hands available. A coordinator posts an explicit /request in an approved group. The wearer reads one request on Even G2, chooses a short response, reviews the chat ID and exact message, and confirms with a tap or R1 ring. The server pairs only the configured wearer and sends through a dedicated Telegram bot in the original message thread. A missing delivery receipt stays uncertain and is never automatically retried.
@@ -23,13 +29,13 @@ The implementation includes both a Telegram transport and an isolated synthetic 
 - [x] Official rules rechecked after kickoff (November 23 official HTML).
 - [ ] Account registered and eligibility/team details verified.
 - [x] Working source built during build week, with pre-build disclosure retained.
-- [ ] Public repository URL and clean setup verified.
+- [x] Public repository URL and clean setup verified.
 - [x] Actual official-simulator demo journey captured, with synthetic data clearly identified.
-- [ ] Actual demo video hosted, accessible, duration <=180 seconds.
+- [x] Actual simulator demo video hosted, accessible, duration 86 seconds. Final form acceptance remains to be checked.
 - [x] Description reflects implemented behavior and names the chosen track; live-test limitation disclosed.
 - [x] Optional API feature feedback: none claimed; no unverified provider deficiencies invented.
 - [ ] Optional .ehpk verified if provided.
 - [ ] DoraHacks submission completed before November 29, 2026, 19:59 UTC.
 - [ ] Published entry and all outbound links verified.
 
-No public repository or DoraHacks entry has been verified. A local simulator-only .ehpk has been generated with the official CLI. A publicly hosted backend/device package and live Telegram delivery are still unverified. The public repository URL, hosted video URL, and final entry URL must be filled from actual successful publication results.
+The public repository and demo file have been verified. A local simulator-only .ehpk has been generated with the official CLI. Live Telegram delivery, a publicly hosted backend/device package, and the DoraHacks entry remain unverified. Do not mark the hackathon complete until the required remaining evidence exists.
