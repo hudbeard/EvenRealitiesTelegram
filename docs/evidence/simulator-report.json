@@ -1,0 +1,57 @@
+{
+  "mode": "demo",
+  "telegramCalls": false,
+  "checks": [
+    "official simulator boot",
+    "576x288 framebuffer",
+    "pairing",
+    "request read",
+    "reply preview",
+    "cancel without send",
+    "one confirmation receipt",
+    "root exit gesture"
+  ],
+  "frames": [
+    {
+      "name": "01-welcome",
+      "lit": 4306
+    },
+    {
+      "name": "04-request",
+      "lit": 2907
+    },
+    {
+      "name": "05-read",
+      "lit": 2108
+    },
+    {
+      "name": "06-replies",
+      "lit": 1970
+    },
+    {
+      "name": "07-preview",
+      "lit": 3249
+    },
+    {
+      "name": "08-cancelled",
+      "lit": 1970
+    },
+    {
+      "name": "09-preview-again",
+      "lit": 3249
+    },
+    {
+      "name": "10-receipt",
+      "lit": 2565
+    },
+    {
+      "name": "11-caught-up",
+      "lit": 4306
+    },
+    {
+      "name": "12-system-exit",
+      "lit": 0
+    }
+  ],
+  "errors": []
+}

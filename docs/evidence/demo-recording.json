@@ -1,0 +1,55 @@
+{
+  "source": "official Even Hub simulator HTTP framebuffer",
+  "mode": "demo",
+  "liveTelegram": false,
+  "frames": 344,
+  "fps": 4,
+  "durationSeconds": 86,
+  "stages": [
+    {
+      "action": null,
+      "seconds": 6,
+      "caption": "Your crew is waiting for you."
+    },
+    {
+      "action": "click",
+      "seconds": 10,
+      "caption": "A coordinator asks for cover at the north entrance."
+    },
+    {
+      "action": "click",
+      "seconds": 10,
+      "caption": "Read the request without taking out your phone."
+    },
+    {
+      "action": "click",
+      "seconds": 10,
+      "caption": "Choose a short response with a touchpad or the R1 ring."
+    },
+    {
+      "action": "click",
+      "seconds": 12,
+      "caption": "Review the chat, bot identity, and exact reply."
+    },
+    {
+      "action": "double_click",
+      "seconds": 10,
+      "caption": "Double tap cancels. Nothing has been sent."
+    },
+    {
+      "action": "click",
+      "seconds": 8,
+      "caption": "Return to review when you are ready."
+    },
+    {
+      "action": "click",
+      "seconds": 12,
+      "caption": "Confirm once. The local demo transport returns a receipt."
+    },
+    {
+      "action": "click",
+      "seconds": 8,
+      "caption": "Back to the moment. Ready for the next request."
+    }
+  ]
+}

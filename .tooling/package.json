@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@evenrealities/evenhub-cli": "0.2.0",
+    "@evenrealities/evenhub-simulator": "0.9.5"
+  }
+}

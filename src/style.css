@@ -1,0 +1,273 @@
+:root {
+  font-family: Inter, Arial, sans-serif;
+  color: #203c32;
+  background: #f5f5f0;
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid #bdc8bf;
+  border-radius: 7px;
+  background: transparent;
+  color: #203c32;
+  padding: 12px 18px;
+  font-size: 13px;
+  font-weight: 600;
+}
+button:hover {
+  background: #e6ebe2;
+}
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid #789743;
+  outline-offset: 3px;
+}
+[hidden] {
+  display: none !important;
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 6vw;
+  border-bottom: 1px solid #d9dfd5;
+}
+.brand {
+  text-decoration: none;
+  color: #203c32;
+  font-weight: 800;
+  font-size: 36px;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.brand span {
+  font-size: 13px;
+  letter-spacing: 0.18em;
+}
+#connection {
+  font-size: 12px;
+}
+main {
+  max-width: 1300px;
+  margin: auto;
+  padding: 0 6vw;
+}
+.intro {
+  padding: 64px 0 40px;
+}
+.eyebrow,
+.section-label {
+  font-size: 10px;
+  letter-spacing: 0.17em;
+  font-weight: 700;
+  color: #6f7f6b;
+}
+h1 {
+  font-size: clamp(36px, 4vw, 58px);
+  letter-spacing: -0.05em;
+  line-height: 1.08;
+  font-weight: 500;
+  margin: 22px 0;
+}
+.lede {
+  font-size: 17px;
+  line-height: 1.6;
+  color: #67715f;
+  margin-bottom: 24px;
+}
+.badge {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  display: inline-block;
+  background: #e3e9d9;
+  padding: 8px 12px;
+  border-radius: 4px;
+}
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.85fr) minmax(240px, 1fr);
+  gap: 40px;
+  padding-bottom: 50px;
+}
+.section-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  letter-spacing: 0.1em;
+  font-size: 9px;
+}
+.lens {
+  background: #0c1c14;
+  border-radius: 18px;
+  padding: 20px;
+  aspect-ratio: 616/328;
+  display: grid;
+  align-items: center;
+}
+.display {
+  aspect-ratio: 2/1;
+  width: 100%;
+  color: #b4f99c;
+  padding: 2% 1.3%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: "Courier New", monospace;
+  font-size: clamp(10px, 1.24vw, 17px);
+}
+#hud-title,
+#hud-footer {
+  font-size: 0.85em;
+  opacity: 0.65;
+  white-space: pre-wrap;
+}
+#hud-title {
+  height: 14%;
+}
+#hud-body {
+  font: inherit;
+  line-height: 1.33;
+  margin: 0;
+  flex: 1;
+  white-space: pre-wrap;
+}
+#hud-footer {
+  height: 14%;
+  padding-top: 8px;
+}
+.controls {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+.controls button {
+  padding: 11px 16px;
+}
+.primary {
+  background: #294b38;
+  color: white;
+  flex: 1;
+}
+.primary:hover {
+  background: #436044;
+}
+.caption {
+  font-size: 11px;
+  line-height: 1.6;
+  color: #808879;
+  margin-top: 15px;
+}
+aside {
+  border-left: 1px solid #d9dfd5;
+  padding-left: 32px;
+}
+h2 {
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  margin: 18px 0 12px;
+}
+aside p,
+.activity p:not(.eyebrow) {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #77816f;
+}
+.text-button {
+  border: 0;
+  padding: 0;
+  text-decoration: underline;
+  font-size: 11px;
+}
+#pair-code {
+  font-size: 32px;
+  letter-spacing: 0.2em;
+  font-family: monospace;
+  margin: 20px 0;
+}
+#pair-code:empty {
+  display: none;
+}
+.wide {
+  width: 100%;
+  margin-top: 10px;
+}
+hr {
+  border: 0;
+  border-top: 1px solid #d9dfd5;
+  margin: 28px 0 20px;
+}
+#notice {
+  font-size: 12px;
+  color: #725c24;
+}
+.activity {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  padding: 36px 0 60px;
+  border-top: 1px solid #d9dfd5;
+}
+#history {
+  font-size: 12px;
+  color: #77816f;
+}
+#history p {
+  border-bottom: 1px solid #d9dfd5;
+  padding-bottom: 10px;
+}
+footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 24px 6vw;
+  border-top: 1px solid #d9dfd5;
+  color: #8c9485;
+  font-size: 10px;
+}
+@media (min-width: 1400px) {
+  .display {
+    font-size: 17px;
+  }
+}
+@media (max-width: 760px) {
+  .intro {
+    padding-top: 36px;
+  }
+  .workspace {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .display {
+    font-size: clamp(11px, 2.6vw, 17px);
+  }
+  aside {
+    border-left: 0;
+    border-top: 1px solid #d9dfd5;
+    padding: 20px 0 0;
+  }
+  .activity {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .controls {
+    flex-wrap: wrap;
+  }
+  .controls button {
+    padding: 10px 14px;
+  }
+  #connection {
+    font-size: 10px;
+  }
+  footer span {
+    display: none;
+  }
+}
