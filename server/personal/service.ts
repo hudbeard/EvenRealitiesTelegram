@@ -48,10 +48,14 @@ export class PersonalService {
     this.set("watched", JSON.stringify([...new Set(ids)]));
     return this.watched();
   }
-  async chat(id: string): Promise<Chat> {
-    if (!this.watched().includes(id))
+  async chat(id: string, accountScope = false): Promise<Chat> {
+    if (!accountScope && !this.watched().includes(id))
       throw new Problem(403, "Choose this chat on your phone first.");
-    const chat = (await this.provider.dialogs()).find((c) => c.id === id);
+    let chat = (await this.provider.dialogs()).find((c) => c.id === id);
+    if (!chat && accountScope) {
+      const saved = await this.provider.saved();
+      if (saved.id === id) chat = saved;
+    }
     if (!chat) throw new Problem(404, "Chat is no longer available.");
     return chat;
   }
@@ -65,6 +69,21 @@ export class PersonalService {
         ...m,
         revision: digest(m.text),
       })),
+    };
+  }
+  async accountHistory(id: string, search = "", before?: number) {
+    if (
+      search.length > 120 ||
+      (before !== undefined && (!Number.isInteger(before) || before <= 0))
+    )
+      throw new Problem(400, "Invalid history request.");
+    const chat = await this.chat(id, true),
+      h = await this.provider.history(chat, search, before);
+    return {
+      ...h,
+      chat,
+      messages: h.messages.map((m) => ({ ...m, revision: digest(m.text) })),
+      hasOlder: h.messages.length === 40,
     };
   }
   async brief() {
@@ -93,17 +112,21 @@ export class PersonalService {
     id: string,
     action: PersonalAction,
     revision: string,
+    accountScope = false,
   ): Promise<{ status: string; result: unknown }> {
     if (!/^[a-zA-Z0-9-]{16,80}$/.test(id))
       throw new Problem(400, "Invalid confirmation ID.");
     if (
-      !["reply", "react", "save"].includes(action.kind) ||
+      !action ||
+      (!accountScope && action.kind === "send") ||
+      !["reply", "send", "react", "save"].includes(action.kind) ||
       !Number.isInteger(action.messageId) ||
-      action.messageId <= 0
+      (action.messageId <= 0 &&
+        !(accountScope && action.kind === "send" && action.messageId === 0))
     )
       throw new Problem(400, "Invalid action.");
     if (
-      action.kind === "reply" &&
+      (action.kind === "reply" || action.kind === "send") &&
       (typeof action.text !== "string" ||
         !action.text.trim() ||
         action.text.length > 4096)
@@ -114,7 +137,7 @@ export class PersonalService {
       !["👍", "❤️", "✅"].includes(action.reaction ?? "")
     )
       throw new Problem(400, "Choose a supported reaction.");
-    const hash = digest({ action, revision });
+    const hash = digest({ action, revision, accountScope });
     const old = this.store.db
       .prepare("SELECT * FROM personal_actions WHERE id=?")
       .get(id) as
@@ -127,32 +150,37 @@ export class PersonalService {
         result: old.result ? JSON.parse(old.result) : null,
       };
     }
-    const chat = await this.chat(action.chatId);
-    if (chat.kind === "channel" && action.kind === "reply")
+    const chat = await this.chat(action.chatId, accountScope);
+    if (
+      chat.kind === "channel" &&
+      (action.kind === "reply" || action.kind === "send")
+    )
       throw new Problem(
         400,
         "Reply in the linked discussion using Telegram; direct channel posting is not offered.",
       );
-    const current = (await this.provider.history(chat)).messages.find(
-      (m) => m.id === action.messageId,
-    );
-    if (!current)
-      throw new Problem(
-        409,
-        "Source message is no longer available. Reopen the chat.",
-      );
-    if (digest(current.text) !== revision)
-      throw new Problem(
-        409,
-        "Source changed since review. Read it again before acting.",
-      );
+    if (action.kind !== "send") {
+      const current = (
+        await this.provider.history(chat, undefined, action.messageId + 1)
+      ).messages.find((m) => m.id === action.messageId);
+      if (!current)
+        throw new Problem(
+          409,
+          "Source message is no longer available. Reopen the chat.",
+        );
+      if (digest(current.text) !== revision)
+        throw new Problem(
+          409,
+          "Source changed since review. Read it again before acting.",
+        );
+    }
     // Recheck after provider awaits: a parallel request may already have claimed this ID.
     const claimed = this.store.db
       .prepare(
         "INSERT OR IGNORE INTO personal_actions VALUES(?,?,'sending',NULL,?)",
       )
       .run(id, hash, Date.now());
-    if (!claimed.changes) return this.act(id, action, revision);
+    if (!claimed.changes) return this.act(id, action, revision, accountScope);
     try {
       const result = await this.provider.write(action);
       this.store.db

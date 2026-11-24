@@ -1,6 +1,6 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
-const personal = process.env.FIELDLINE_APP === "personal";
+const personal = process.env.FIELDLINE_APP !== "crew";
 const backend = new URL(
   process.env.FIELDLINE_BACKEND_URL ??
     (personal ? "http://127.0.0.1:3003" : "http://127.0.0.1:3001"),
@@ -32,13 +32,13 @@ run(["node_modules/vite/bin/vite.js", "build"], {
 });
 const manifest = JSON.parse(await readFile("app.json", "utf8"));
 if (personal) {
-  manifest.entrypoint = "personal.html";
-  manifest.version = "0.2.0";
+  manifest.entrypoint = "glasses.html";
+  manifest.version = "0.3.0";
 }
 manifest.permissions = [
   {
     name: "network",
-    desc: "Read crew requests and send explicitly confirmed replies through the Fieldline backend.",
+    desc: "Browse Telegram conversations and send explicitly confirmed actions through your server.",
     whitelist: [backend.origin],
   },
 ];

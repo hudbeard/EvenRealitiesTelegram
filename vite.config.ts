@@ -2,7 +2,13 @@ import { defineConfig } from "vite";
 export default defineConfig({
   build: {
     target: "es2022",
-    rollupOptions: { input: { crew: "index.html", personal: "personal.html" } },
+    rollupOptions: {
+      input: {
+        crew: "index.html",
+        personal: "personal.html",
+        glasses: "glasses.html",
+      },
+    },
   },
   base: "./",
   server: {

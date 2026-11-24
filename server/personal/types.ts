@@ -27,7 +27,7 @@ export type Sponsored = {
 };
 export type History = { messages: Message[]; sponsored: Sponsored[] };
 export type PersonalAction = {
-  kind: "reply" | "react" | "save";
+  kind: "reply" | "send" | "react" | "save";
   chatId: string;
   messageId: number;
   text?: string;
@@ -36,7 +36,8 @@ export type PersonalAction = {
 export interface PersonalProvider {
   readonly synthetic: boolean;
   dialogs(): Promise<Chat[]>;
-  history(chat: Chat, search?: string): Promise<History>;
+  history(chat: Chat, search?: string, before?: number): Promise<History>;
+  saved(): Promise<Chat>;
   write(action: PersonalAction): Promise<{ messageId?: number }>;
   read(chatId: string, messageId: number): Promise<void>;
   sponsoredView(chatId: string, id: string): Promise<void>;

@@ -1,0 +1,78 @@
+{
+  "source": "official Even Hub simulator framebuffer captures",
+  "synthetic": true,
+  "liveTelegram": false,
+  "durationSeconds": 112,
+  "scenes": [
+    [
+      "01-home",
+      "Telegram starts on the glasses.",
+      "A personal-account client with a separate API server."
+    ],
+    [
+      "02-chats",
+      "Your conversations, browsed with G2 or R1.",
+      "Unread counts and account conversations; catch-up selection is optional."
+    ],
+    [
+      "03-thread",
+      "Read messages and reply context.",
+      "Swipe through the thread. Tap to read the full source."
+    ],
+    [
+      "04-compose",
+      "Compose without a phone textbox.",
+      "Quick replies, a ring-controlled keyboard, or configured dictation."
+    ],
+    [
+      "07a-keyboard",
+      "A complete ring keyboard is available.",
+      "Choose a letter group, then a letter. Case, punctuation, space and backspace."
+    ],
+    [
+      "05-review",
+      "Review the destination and exact reply.",
+      "A separate confirmation sends. Double tap cancels and keeps the draft."
+    ],
+    [
+      "06-receipt",
+      "One confirmed action, one receipt.",
+      "This demonstration uses synthetic data. No real messages are sent."
+    ],
+    [
+      "07-keyboard-message",
+      "Write a new message, not just a preset reply.",
+      "This single-letter test message was entered with glasses gestures."
+    ],
+    [
+      "08-saved",
+      "Saved Messages is part of the glasses app.",
+      "Forward a source, then open your own Telegram notebook."
+    ],
+    [
+      "08a-reaction",
+      "A quick acknowledgement can be a reaction.",
+      "Thumbs up, heart or check; the same explicit review flow."
+    ],
+    [
+      "08b-search-empty",
+      "Search the conversation from G2.",
+      "Honest empty results; refresh returns to the latest messages."
+    ],
+    [
+      "08c-catchup",
+      "Catch up on what changed.",
+      "Source-linked changes, replies, questions and your stated commitments."
+    ],
+    [
+      "09-watchlist",
+      "Manage catch-up chats on the glasses.",
+      "Ten selected conversations; the main chat browser remains independent."
+    ],
+    [
+      "10-controls",
+      "Phone for setup. Glasses for the interaction.",
+      "Even Hub hosts the bridge. Your backend owns the Telegram session."
+    ]
+  ]
+}

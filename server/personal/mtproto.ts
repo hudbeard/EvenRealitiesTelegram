@@ -61,10 +61,17 @@ export class AccountTelegram implements PersonalProvider {
         readMaxId: d.dialog instanceof Api.Dialog ? d.dialog.readInboxMaxId : 0,
       }));
   }
-  async history(chat: Chat, search = ""): Promise<History> {
+  async saved(): Promise<Chat> {
+    const me = await this.client.getMe();
+    const id = me.id.toString();
+    this.peers.set(id, new Api.InputPeerSelf());
+    return { id, title: "Saved Messages", kind: "dm", unread: 0, readMaxId: 0 };
+  }
+  async history(chat: Chat, search = "", before?: number): Promise<History> {
     const rows = await this.client.getMessages(this.peer(chat.id), {
       limit: 40,
       search: search || undefined,
+      offsetId: before,
     });
     const messages: Message[] = rows.map((m) => {
       const sender = m.sender;
@@ -116,10 +123,10 @@ export class AccountTelegram implements PersonalProvider {
     return { messages: messages.sort((a, b) => a.id - b.id), sponsored };
   }
   async write(action: PersonalAction) {
-    if (action.kind === "reply") {
+    if (action.kind === "reply" || action.kind === "send") {
       const m = await this.client.sendMessage(this.peer(action.chatId), {
         message: action.text!,
-        replyTo: action.messageId,
+        replyTo: action.kind === "reply" ? action.messageId : undefined,
         parseMode: false,
       });
       if (!Number.isInteger(m.id) || m.id <= 0)

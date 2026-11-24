@@ -110,6 +110,46 @@ app.post(
     });
   },
 );
+app.get("/api/glasses/dialogs", async (_req, res) =>
+  res.json({ chats: await provider.dialogs(), watched: service.watched() }),
+);
+app.get("/api/glasses/saved", async (_req, res) =>
+  res.json(await provider.saved()),
+);
+app.get("/api/glasses/chats/:id/messages", async (req, res) =>
+  res.json(
+    await service.accountHistory(
+      req.params.id,
+      String(req.query.search ?? ""),
+      req.query.before ? Number(req.query.before) : undefined,
+    ),
+  ),
+);
+app.post("/api/glasses/chats/:id/read", async (req, res) => {
+  const id = req.body.messageId;
+  const h = await service.accountHistory(req.params.id, "", Number(id) + 1);
+  if (!h.messages.some((m) => m.id === id))
+    throw new Problem(400, "Message unavailable.");
+  await provider.read(req.params.id, id);
+  res.json({ ok: true });
+});
+app.post("/api/glasses/chats/:id/sponsored/:ad/view", async (req, res) => {
+  await service.chat(req.params.id, true);
+  await provider.sponsoredView(req.params.id, req.params.ad);
+  res.json({ ok: true });
+});
+app.post("/api/glasses/action", async (req, res) => {
+  if (req.body.confirmed !== true)
+    throw new Problem(400, "Review and confirm first.");
+  res.json(
+    await service.act(
+      String(req.body.operationId ?? ""),
+      req.body.action,
+      String(req.body.revision ?? ""),
+      true,
+    ),
+  );
+});
 app.post("/api/watch", async (req, res) =>
   res.json({ watched: await service.select(req.body.ids) }),
 );
@@ -156,6 +196,7 @@ app.post("/api/logout", (_req, res) => {
   store.revoke(res.locals.token);
   res.json({ ok: true });
 });
+app.get("/", (_req, res) => res.redirect("/glasses.html"));
 app.use(express.static(resolve("dist")));
 app.use(
   (
@@ -171,9 +212,9 @@ app.use(
           : "Telegram is unavailable. No automatic write retry was made.",
     }),
 );
-const server = app.listen(port, "127.0.0.1", () =>
+const server = app.listen(port, process.env.PERSONAL_HOST ?? "127.0.0.1", () =>
   console.log(
-    `Fieldline Catch-up ${demo ? "SYNTHETIC DEMO" : "personal account"}: http://127.0.0.1:${port}/personal.html`,
+    `Fieldline Catch-up ${demo ? "SYNTHETIC DEMO" : "personal account"}: http://127.0.0.1:${port}/glasses.html`,
   ),
 );
 const close = () =>

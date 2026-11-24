@@ -1,6 +1,6 @@
 {
   "name": "fieldline",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -17,7 +17,12 @@
     "personal:login": "tsx scripts/personal-login.ts",
     "personal:approve": "node scripts/personal-approve.mjs",
     "personal:simulate": "node .tooling/node_modules/@evenrealities/evenhub-simulator/bin/index.js http://127.0.0.1:3003/personal.html --automation-port 9899",
-    "personal:test": "node scripts/personal-smoke.mjs"
+    "personal:test": "node scripts/personal-smoke.mjs",
+    "glasses:icons": "node scripts/glasses-icons.mjs",
+    "glasses:simulate": "node .tooling/node_modules/@evenrealities/evenhub-simulator/bin/index.js http://127.0.0.1:3003/glasses.html --automation-port 9899",
+    "glasses:test": "node scripts/glasses-smoke.mjs",
+    "server:build": "tsc -p tsconfig.server.json",
+    "start": "node dist-server/server/personal/index.js"
   },
   "dependencies": {
     "@evenrealities/even_hub_sdk": "0.0.16",

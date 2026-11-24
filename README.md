@@ -1,82 +1,85 @@
-# Fieldline
+# Fieldline — Telegram on G2
 
-**November 24 upgrade:** [Fieldline Catch-up with personal Telegram accounts](docs/personal-account.md) now adds selected-chat context, changed-plan cards, custom replies as you, reactions, Saved Messages, search, and read state. Run `npm run personal:demo` after building, then open `/personal.html` on port 3003. The source below documents the original crew-bot prototype; its published video remains a v0 demonstration. Live personal-account verification is still pending owner login.
+A glasses-first personal Telegram client for Even Realities G2 and the R1 ring. Browse conversations, read message threads, compose, review, send, react, and save messages on the glasses. The phone hosts Even Hub and handles setup; your server maintains the Telegram session and serves the API.
 
-![Fieldline Catch-up source context](docs/media/personal-source.png)
+![Actual G2 home framebuffer](docs/media/glasses-home.png)
 
-[Personal-account simulator walkthrough](docs/media/fieldline-personal-demo.mp4) · [Setup and verified capabilities](docs/personal-account.md)
+[112-second glasses-first simulator walkthrough](docs/media/fieldline-glasses-demo.mp4) · [Server setup](docs/standalone.md)
 
-Telegram crew coordination for the Even Realities G2. One request, a short response, and an explicit confirmation on the glasses or R1 ring.
+**Status:** glasses-only synthetic simulator flows verified; personal Telegram adapter implemented. Real account delivery, live dictation, physical G2 testing, public server deployment, and DoraHacks submission remain unverified.
 
-**Status: application implemented; nine backend tests and the official simulator demo journey pass. Live Telegram delivery and the DoraHacks submission are not yet verified.**
+## What happens on the glasses
 
-![Fieldline in the official simulator](docs/media/fieldline-preview.png)
+- **Chats:** recent account conversations, unread counts, direct messages, groups and channel text; no catch-up selection required. Search conversations on G2.
+- **Threads:** swipe messages, paginate full text, inspect the original replied-to message, search history and load older messages. Media is identified; view rich media in Telegram.
+- **Compose:** hold to dictate with configured speech service, use a grouped ring keyboard with case/punctuation/backspace, or choose a quick reply. Read your draft and review its destination before a separate confirmation.
+- **Actions:** reply as yourself, write a new message, react with thumbs up/heart/check, or forward to Saved Messages. Cancellation preserves a draft. Missing receipts stay uncertain; writes are not automatically retried.
+- **Catch-up:** source-linked changes, unanswered questions, replies and your stated commitments. Read the evidence and open the underlying conversation. Manage its ten-chat selection entirely on G2.
+- **Saved Messages:** a real Telegram self-chat, readable and writable from the glasses.
 
-[86-second simulator walkthrough](docs/media/fieldline-demo.mp4) · [Verification evidence](docs/verification.md)
+Swipe selects; tap opens; double tap returns; hold dictates in compose/search. Double tap at home exits. Microphone capture stops on app exit. Monochrome icons and three-item menus fit the 576×288 display. English is the current display target.
 
-## Objective
+## Run the standalone app
 
-Event crews and small teams coordinate while carrying equipment and helping attendees. A Telegram group member posts `/request Can you cover the north entrance?`. The wearer opens it on G2, chooses “On my way”, “Done”, or “I cannot cover this”, reviews the chat ID and exact reply, and confirms. The bot replies in the original thread with the configured wearer's label. Cancel never sends. An ambiguous send is locked and marked uncertain, never automatically retried.
-
-Track: **Messaging & News**. Telegram direction selected by the project owner on November 18, 2026. The integration is a bot in one approved group, not access to the wearer's personal Telegram inbox. Voice input is not implemented; the tap/ring path works without microphone permissions or an AI service.
-
-## Run locally
-
-Requires Node 24.18+ (uses built-in SQLite), npm, and Windows for the verified native simulator setup. Other platforms have not been tested here.
+Node 24.18+ is required for built-in SQLite. Windows is the verified simulator platform.
 
 ```powershell
 npm ci
 npm ci --prefix .tooling
-Copy-Item .env.example .env  # only on first setup; preserve an existing .env
 npm run build
-npm run server
+npm run personal:demo
+# In another terminal:
+npm run glasses:simulate
 ```
 
-Open `http://127.0.0.1:3001` for the phone companion. In a second terminal, run `npm run simulate`. The simulator opens the same production build and exposes its control plane on port 9898. Keep that automation port local.
+The simulator loads **glasses.html** from port 3003. Tap twice on G2 to pair the synthetic demo. All chat browsing and composing can then be completed using glasses gestures. No phone text box is required. An optional display mirror is available at http://127.0.0.1:3003/glasses.html; /personal.html is the secondary companion workspace.
 
-The default is **demo mode**: every request and receipt is synthetic, clearly labelled on the glasses. Tap once to generate a pairing code, again to approve demo pairing, then again to add a sample request. The companion also has buttons for these actions. Open → choose reply → review → confirm. Double tap cancels a preview; double tap at the root exits.
+For real personal-account access, obtain your own Telegram API credentials, copy .env.example to .env if needed, set TELEGRAM_API_ID and TELEGRAM_API_HASH, then run:
 
-For frontend iteration use `npm run dev` with the backend running. Vite proxies `/api` to port 3001. In live mode set `PUBLIC_ORIGIN` to the frontend origin used for development; the documented production setup uses port 3001.
+```powershell
+npm run personal:login    # owner enters phone/code/2FA locally
+npm run personal:server
+npm run glasses:simulate
+# Approve the code shown on G2, once:
+npm run personal:approve -- CODE
+```
 
-## Connect a real Telegram test group
+The account session stays in the ignored .data/personal.session. Do not share it or your credentials. A bot token is not used by this client. Login and real Telegram writes have not been tested with owner credentials yet.
 
-1. Create a dedicated bot yourself with Telegram's official `@BotFather` and put its token in the ignored `.env` file as `TELEGRAM_BOT_TOKEN`. Do not place tokens in source, video, URLs shared with others, or chat.
-2. Add it to a consenting test group. In your own private chat with the bot send `/start`. In the group send `/request@YourBotUsername Cover the north entrance?`. Addressing the bot explicitly works with Telegram's default group privacy mode.
-3. With the backend stopped, run `npm run telegram:check`. This only calls `getMe` and `getUpdates`; it prints numeric chat/user IDs and omits message text and the token. Set your private-chat sender ID as `TELEGRAM_OPERATOR_ID` and the test group's negative ID as `TELEGRAM_CHAT_ID`.
-4. Set `FIELDLINE_MODE=telegram`, choose a printable English `OPERATOR_LABEL` of 1–24 characters, then restart `npm run server`. Demo and real data use separate SQLite files. Confirm `/api/health` says `telegram` before claiming a live demo.
-5. Start/restart the simulator. Start pairing, then privately send `/pair 123456` with the code displayed on the glasses to your bot. Only the configured wearer can approve pairing. The code expires in five minutes and the session in four hours.
-6. Have a consenting test participant post a fresh `/request@YourBotUsername ...` in the approved group. Read and confirm a reply on G2. Verify the receipt and actual reply in the correct Telegram thread. This final live test has not yet been performed in this workspace.
+## Server and package
 
-Telegram group admin access is not required for ordinary `/request` commands when the bot is explicitly addressed and permitted to send replies. Only one `getUpdates` poller can use the bot token at a time. If a webhook or other bot service already owns it, use a fresh dedicated test bot; this app does not remove webhooks or change bot permissions.
+[Backend deployment and API](docs/standalone.md) explains local production execution, the Docker image, persistent storage, API endpoints and the device package. The server serves both the API and the app assets. It is a single-owner backend.
 
-## Verify
+```powershell
+npm run server:build
+npm start
+# Or build a deployable image:
+docker build -t fieldline .
+# Default package uses glasses.html:
+npm run pack
+```
+
+Use a reachable HTTPS server for actual glasses. Set FIELDLINE_BACKEND_URL before packing and PERSONAL_ORIGIN on the backend. The packer generates the exact network whitelist. Set FIELDLINE_VOICE=true to include microphone permission when your STT endpoint is configured. Localhost packages only work with the local simulator; the phone's localhost is not your computer.
+
+G2 still requires the Even phone app as its SDK/Bluetooth host. “Standalone” here describes the complete glasses interaction flow, with a separate server for Telegram—not independent cellular hardware inside G2.
+
+## Verification
 
 ```powershell
 npm test
 npm run build
-# With the demo backend and a fresh/root-level official simulator running:
-npm run test:simulator
+npm run server:build
+# Fresh synthetic demo + official simulator:
+npm run glasses:test
 ```
 
-The nine backend tests cover concurrent duplicate confirmation, reply binding, ambiguous delivery, explicit Telegram rejection, invalid receipts, expiry, retention, scoped ingestion, restart recovery, and HTTP pairing/access boundaries. The simulator check drives real SDK input through the official automation API and writes raw/composited framebuffers plus a JSON report under `artifacts/simulator/`. It refuses to run against Telegram mode. If requests are pending, finish them before rerunning it. A root double tap shuts down the display; restart the simulator for another run.
+22 automated tests cover source revision binding, single dispatch, ambiguous delivery, account-wide access boundaries, exact new-message text, Saved Messages, read state, speech formatting, review pagination and cancellation. The glasses smoke test drives official SDK gestures and captures actual 576×288 framebuffers. It covers pairing, chat browsing, reading, reply cancellation, confirmed reply, ring-keyboard new message, save, watchlist and controls. No real Telegram messages are sent by these tests.
 
-Localhost integration tests require a runtime that permits loopback connections. This environment's restricted sandbox denies those connections, so that one test and simulator orchestration were run through the approved external execution path. The type check and production build pass locally.
-
-## Package and deployment
-
-`npm run pack` creates `artifacts/fieldline.ehpk` for the local backend. For a hosted backend, set `FIELDLINE_BACKEND_URL` to its HTTPS origin before packing. The pack script compiles the API base into the client and generates the exact network permission whitelist; no provider token enters the browser bundle. The backend must allow the installed WebView origin through `PUBLIC_ORIGIN` and return CORS/preflight headers. Setting `PUBLIC_ORIGIN=*` permits bearer-authenticated packaged WebViews without cookies; otherwise use the known exact origin.
-
-The default localhost package is for the local simulator only. On a phone, localhost means the phone itself. A device-ready package requires a reachable HTTPS backend and actual device testing. No public backend or hardware deployment has been verified.
-
-## Data and reliability
-
-The server owns the Telegram token. Browser sessions hold a random bearer token, hashed in server storage; pairing tokens are recoverable only during the five-minute pairing window. The backend processes only explicit request commands in one configured group. Requests expire after 30 minutes. Ordinary records older than 24 hours are removed on queue access; uncertain sends remain for operator reconciliation. Storage is capped at 1,000 requests. SQLite files and logs are ignored by Git. Store the database on a protected local disk; application-level encryption at rest is not implemented.
-
-Display text currently targets English. Long source text paginates; the phone companion is a preview, not a substitute for the official simulator. No background overlays, personal-account messaging, trading, automatic commitments, or microphone recording are implemented. A lost delivery receipt requires checking Telegram; there is no resend button for that request.
+[Glasses-first verification and setup](docs/standalone.md) · [Submission draft](docs/submission-draft.md) · [Earlier personal prototype](docs/personal-account.md) · [Original bot prototype](docs/crew-prototype.md)
 
 ## Source and acknowledgements
 
-SDK bootstrap and event-routing patterns are based on the official MIT-licensed `even-realities/evenhub-templates/minimal` template, consulted November 23. Dependencies include the Even Hub SDK, simulator, CLI, Vite, Express, dotenv, TypeScript, tsx, and sharp. Application implementation began November 23, 2026. The app is MIT licensed; dependency licenses remain their own.
+Based on the official Even Hub minimal template patterns, SDK 0.0.16, simulator 0.9.5 and CLI 0.2.0. Telegram transport uses Teleproto. Application implementation began November 23, 2026. MIT license; dependency licenses remain their own.
 
 ## Build-period disclosure
 
@@ -85,11 +88,3 @@ The workspace was empty when inspected November 18, 2026. These preparation docu
 Build opens: November 23, 2026, 08:00 UTC (02:00 America/Chicago).
 Submission closes: November 29, 2026, 19:59 UTC (13:59 America/Chicago).
 
-## Preparation documents
-
-- [Verified requirements](docs/requirements.md)
-- [Implementation and verification plan](docs/build-plan.md)
-- [Verified development tools](docs/environment.md)
-- [Draft submission and demo outline](docs/submission-draft.md)
-
-Source: https://dorahacks.io/hackathon/even-realities/detail

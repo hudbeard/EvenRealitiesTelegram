@@ -83,19 +83,34 @@ export class DemoPersonal implements PersonalProvider {
   async dialogs() {
     return this.chats.map((c) => ({ ...c }));
   }
-  async history(chat: Chat, search = ""): Promise<History> {
+  async saved() {
+    let chat = this.chats.find((c) => c.id === "demo:saved");
+    if (!chat) {
+      chat = {
+        id: "demo:saved",
+        title: "Saved Messages",
+        kind: "dm",
+        unread: 0,
+        readMaxId: 0,
+      };
+      this.chats.push(chat);
+    }
+    return { ...chat };
+  }
+  async history(chat: Chat, search = "", before?: number): Promise<History> {
     return {
       messages: this.messages.filter(
         (m) =>
           m.chatId === chat.id &&
-          m.text.toLowerCase().includes(search.toLowerCase()),
+          m.text.toLowerCase().includes(search.toLowerCase()) &&
+          (!before || m.id < before),
       ),
       sponsored: [],
     };
   }
   async write(action: PersonalAction) {
     this.writes.push({ ...action });
-    if (action.kind === "reply") {
+    if (action.kind === "reply" || action.kind === "send") {
       const id = 100 + this.writes.length;
       this.messages.push({
         id,
@@ -104,7 +119,24 @@ export class DemoPersonal implements PersonalProvider {
         outgoing: true,
         text: action.text!,
         date: Date.now(),
-        replyTo: action.messageId,
+        replyTo: action.kind === "reply" ? action.messageId : undefined,
+      });
+      return { messageId: id };
+    }
+    if (action.kind === "save") {
+      const source = this.messages.find(
+        (m) => m.chatId === action.chatId && m.id === action.messageId,
+      );
+      if (!source) throw new Error("Source not found");
+      const saved = await this.saved(),
+        id = 100 + this.writes.length;
+      this.messages.push({
+        ...source,
+        id,
+        chatId: saved.id,
+        sender: "You",
+        outgoing: true,
+        date: Date.now(),
       });
       return { messageId: id };
     }
