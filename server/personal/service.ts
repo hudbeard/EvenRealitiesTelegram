@@ -182,7 +182,11 @@ export class PersonalService {
       .run(id, hash, Date.now());
     if (!claimed.changes) return this.act(id, action, revision, accountScope);
     try {
-      const result = await this.provider.write(action);
+      const receipt = await this.provider.write(action);
+      const result =
+        action.kind === "send" || action.kind === "reply"
+          ? { ...receipt, revision: digest(action.text) }
+          : receipt;
       this.store.db
         .prepare(
           "UPDATE personal_actions SET status='sent',result=? WHERE id=?",

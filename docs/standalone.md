@@ -45,10 +45,10 @@ Health and pairing start/poll are unauthenticated; live approval requires a loca
 
 ## Speech
 
-Configure a Whisper-compatible multipart endpoint through STT_API_URL, STT_API_KEY and STT_MODEL. The server wraps G2 PCM in a WAV container; audio is not written to disk. Audio is transmitted to the configured provider. The returned transcript becomes a draft and still requires glasses review plus confirmation. Without speech configuration, use the complete ring keyboard. Live capture/transcription requires hardware/provider verification.
+Configure a Whisper-compatible multipart endpoint through STT_API_URL, STT_API_KEY and STT_MODEL. The server wraps G2 PCM in a WAV container; audio is not written to disk. Audio is transmitted to the configured provider. The returned transcript becomes a draft and still requires glasses review plus confirmation. Without speech configuration, use built-in or model-backed replies. Dictating a new message and voice search require speech setup. Live capture/transcription requires hardware/provider verification.
 
 ## Verified November 24
 
-23 tests, frontend and compiled server builds pass. The official simulator verifies the inbox preview pane, message and reply layouts, system contextual shortcuts, native list focus, draft retention, exact send, keyboard entry, Saved Messages, reactions, search return, and plan-specific reply choices. The app stops microphone capture when leaving the foreground and resumes input on return. Closing a contextual menu leaves the conversation active. Hardware behavior remains unverified.
+28 tests and both builds pass. The official simulator verifies direct inbox entry, blank gesture capture, two-tap reply confirmation, cancellation, inline receipts, local-model suggestions, Saved Messages, and reactions. Microphone and transcription logic are tested with synthetic PCM. The app stops microphone capture when leaving the foreground and resumes input on return. Closing a contextual menu leaves the conversation active. Hardware behavior remains unverified.
 
 The source is ready for owner login and a hosted HTTPS endpoint. No real Telegram receipt, live speech receipt or DoraHacks submission is claimed.

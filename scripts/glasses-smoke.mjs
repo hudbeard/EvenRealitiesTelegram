@@ -30,6 +30,19 @@ const pairing = await request(server + "/api/pair", {});
 await request(server + "/api/pair/approve", { code: pairing.code });
 const { token } = await request(server + "/api/pair/" + pairing.id);
 assert(token);
+if (process.env.EXPECT_STT_FIXTURE === "1") {
+  assert.equal(health.voiceEnabled, true);
+  const transcribed = await fetch(server + "/api/transcribe", {
+    method: "POST",
+    body: new Uint8Array(3200),
+    headers: {
+      authorization: "Bearer " + token,
+      "content-type": "application/octet-stream",
+    },
+  });
+  assert.equal(transcribed.status, 200);
+  assert.equal((await transcribed.json()).text, "I’ll bring the prototype.");
+}
 const history = async (id) =>
   (
     await request(
@@ -75,7 +88,11 @@ async function choose(label) {
     "Could not focus “" + label + "” in " + JSON.stringify(await frame()),
   );
 }
-async function shortcut(offset) {
+async function shortcut(label) {
+  const offset =
+    (await frame()).shortcuts?.findIndex((action) => action.label === label) ??
+    -1;
+  assert(offset >= 0, "Shortcut missing: " + label);
   await gesture("context_menu");
   for (let i = 0; i < offset; i++) await gesture("down");
   await tap();
@@ -106,123 +123,103 @@ if ((await frame()).body.includes("Tap to connect")) {
 }
 assert.equal(
   (await frame()).title,
-  "Telegram",
-  "Start a fresh simulator at Home.",
+  "Chats",
+  "Start a fresh simulator at Chats.",
 );
 assert.equal((await frame()).badge, "DEMO");
-await shot("01-home");
-await choose("Unread");
-assert.match((await frame()).split.detail, /prototype/);
-await shot("02-chats");
-await choose("Maya");
-assert.match((await frame()).body, /prototype too/);
-assert.match((await frame()).footer, /Tap  Reply/);
-await shot("03-thread");
+assert.equal((await frame()).split.heading, "Maya");
+await shot("01-inbox");
+await gesture("down");
+assert.equal((await frame()).split.heading, "Build night");
+await shot("02-inbox-scrolled");
+await gesture("up");
+assert.equal((await frame()).split.heading, "Maya");
+const scrolls = (await request(sim + "/api/console")).entries.filter(
+  (entry) =>
+    entry.message.includes("EvenHub event:") &&
+    (entry.message.includes('"eventType":1') ||
+      entry.message.includes('"eventType":2')),
+);
+assert(scrolls.length >= 2);
+assert(
+  scrolls.every((entry) =>
+    entry.message.includes('"containerName":"gestures"'),
+  ),
+  "A visible row captured scrolling.",
+);
 
+await tap();
+assert.equal((await frame()).title, "Maya");
+assert.match((await frame()).body, /prototype too/);
+await shot("03-thread");
 const original = await history("demo:maya");
+
 await tap();
 assert.equal((await frame()).title, "Reply · Maya");
-assert.match((await frame()).split.detail, /get back to you/);
-await shot("04-compose");
-await choose("Check first");
-const reply = (await frame()).body;
-assert.equal((await frame()).title, "Send · Maya");
 assert.match((await frame()).context, /prototype too/);
-await shot("05-review");
+assert.match((await frame()).footer, /Tap  Send/);
+const first = (await frame()).body;
+if (process.env.EXPECT_REPLY_IDEAS === "1") {
+  assert.match((await frame()).badge, /^AI /);
+  assert.equal(first, "Which prototype should I bring?");
+}
+await shot("04-quick-reply");
+await gesture("down");
+const chosen = (await frame()).body;
+assert.notEqual(chosen, first);
+await shot("05-second-idea");
 await back();
-assert.equal((await frame()).badge, "DRAFT");
+assert.equal((await frame()).title, "Maya");
 assert.deepEqual(await history("demo:maya"), original);
-await back();
-await back();
-assert.equal((await frame()).split.heading, "Maya");
 await tap();
+assert.equal((await frame()).body, chosen);
 await tap();
-await choose("Review draft");
-await tap();
-await shot("06-receipt");
+assert.equal((await frame()).title, "Maya");
+assert.match((await frame()).context, /Demo Sent/);
+assert.equal((await frame()).body.split("\n")[0], chosen);
 const sent = (await history("demo:maya")).at(-1);
-assert.equal(sent.text, reply);
+assert.equal(sent.text, chosen);
 assert.equal(sent.replyTo, 11);
-await tap();
-assert.equal((await frame()).body.split("\n")[0], reply);
+await shot("06-inline-receipt");
 
 await gesture("context_menu");
-await shot("06a-shortcuts");
-await gesture("down");
-await tap();
-assert.equal(
-  (await frame()).title,
-  health.voiceEnabled ? "New message · Maya" : "Keyboard",
-);
-if (health.voiceEnabled) await choose("Type a message");
-await shot("07a-keyboard");
-await choose("A B C D E F");
-assert.equal((await frame()).native[0], "a");
-await gesture("down");
-await tap();
-assert.match((await frame()).context, /b/);
-await choose("Done typing");
-await choose("Review draft");
-assert.equal((await frame()).body, "b");
-await shot("07-keyboard-message");
-await tap();
-await tap();
-assert.equal((await history("demo:maya")).at(-1).replyTo, undefined);
-
-await shortcut(0);
+await shot("07-shortcuts");
+await gesture("context_menu");
+await shortcut("Message actions");
 await choose("Save message");
 await tap();
-await tap();
+assert.match((await frame()).context, /Demo Saved/);
 await back();
-await back();
-await choose("Saved Messages");
-assert.match((await frame()).body, /^b/);
+assert.equal((await frame()).split.heading, "Maya");
+await shortcut("Saved Messages");
+assert.equal((await frame()).title, "Saved Messages");
+assert.match((await frame()).body, new RegExp(chosen.slice(0, 12)));
 await shot("08-saved");
 
-await shortcut(0);
+await shortcut("Message actions");
 await choose("React");
 assert.deepEqual((await frame()).native, ["Thumbs up", "Heart", "Check"]);
-await shot("08a-native-picker");
 await gesture("down");
 await tap();
 assert.match((await frame()).body, /^Heart/);
 await tap();
-await shot("08b-reaction");
-await tap();
+assert.match((await frame()).context, /Demo Reacted/);
+await shot("09-reacted");
 
-await back();
-await choose("All chats");
-await choose("Maya");
-await shortcut(2);
-assert.equal((await frame()).title, "Search keyboard");
-await choose("Y Z 0 1 2 3");
-await gesture("down");
-await tap();
-await choose("Search");
-assert.match((await frame()).body, /No messages match/);
-await shot("08c-search-empty");
-await back();
-assert.match((await frame()).body, /^b/);
-await shortcut(3);
+await shortcut("Next unread chat");
 assert.equal((await frame()).title, "Build night");
-assert.match((await frame()).body, /River Cafe/);
 await tap();
-assert.equal((await frame()).split.rows[0], "Acknowledge");
+assert.equal((await frame()).title, "Reply · Build night");
+if (process.env.EXPECT_REPLY_IDEAS === "1")
+  assert.equal((await frame()).body, "Is River Cafe the final spot?");
 await gesture("down");
-assert.match((await frame()).split.detail, /6:30/);
-await shot("08e-plan-reply");
+assert.match((await frame()).body, /6:30/);
+await shot("10-plan-idea");
 await back();
 await back();
-await back();
-await choose("Catch-up");
-await shot("08d-catchup");
-await back();
-await choose("Catch-up chats");
-await shot("09-watchlist");
-await back();
-await choose("Settings");
+await shortcut("Settings");
 await choose("Controls");
-await shot("10-controls");
+await shot("11-controls");
 
 const errors = (await request(sim + "/api/console")).entries.filter(
   (entry) => entry.level === "error",
@@ -231,5 +228,5 @@ assert.deepEqual(errors, []);
 console.log(
   "PASS: " +
     count +
-    " framebuffers, native shortcuts, native focus, reply cancellation, exact send, keyboard, save, reaction and search.",
+    " framebuffers, blank gesture capture, two-tap exact reply, cancellation, inline receipt, native shortcuts, save and reaction.",
 );

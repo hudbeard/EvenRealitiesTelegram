@@ -43,7 +43,7 @@ manifest.permissions = [
   },
 ];
 await mkdir("artifacts", { recursive: true });
-if (personal && process.env.FIELDLINE_VOICE === "true")
+if (personal && process.env.FIELDLINE_VOICE !== "false")
   manifest.permissions.push({
     name: "g2-microphone",
     desc: "Capture a held-to-record reply and transcribe it for explicit review before sending.",

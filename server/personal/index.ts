@@ -8,6 +8,7 @@ import { PersonalService } from "./service.js";
 import { DemoPersonal } from "./demo.js";
 import { AccountTelegram } from "./mtproto.js";
 import { transcribe } from "./speech.js";
+import { suggestReplies } from "./reply-suggestions.js";
 const demo = process.argv.includes("--demo"),
   port = Number(process.env.PERSONAL_PORT ?? 3003),
   origin = process.env.PERSONAL_ORIGIN ?? `http://127.0.0.1:${port}`;
@@ -81,6 +82,9 @@ app.get("/api/health", (_req, res) =>
     mode: demo ? "personal-demo" : "personal",
     synthetic: demo,
     voiceEnabled: !!process.env.STT_API_URL,
+    replyIdeasEnabled: !!(
+      process.env.REPLY_AI_URL && process.env.REPLY_AI_MODEL
+    ),
   }),
 );
 app.use("/api", (req, res, next) => {
@@ -125,6 +129,39 @@ app.get("/api/glasses/chats/:id/messages", async (req, res) =>
     ),
   ),
 );
+app.post("/api/glasses/chats/:id/reply-ideas", async (req, res) => {
+  const url = process.env.REPLY_AI_URL,
+    model = process.env.REPLY_AI_MODEL;
+  if (!url || !model) return res.json({ replies: [] });
+  const { messageId, revision } = req.body ?? {};
+  if (
+    !Number.isSafeInteger(messageId) ||
+    messageId < 1 ||
+    typeof revision !== "string"
+  )
+    throw new Problem(400, "Open a message to get reply ideas.");
+  const history = await service.accountHistory(
+    req.params.id,
+    "",
+    messageId + 1,
+  );
+  const source = history.messages.find((message) => message.id === messageId);
+  if (!source || source.revision !== revision)
+    throw new Problem(409, "The message changed. Reopen it for reply ideas.");
+  if (history.chat.kind === "channel" || source.outgoing || !source.text.trim())
+    return res.json({ replies: [] });
+  try {
+    res.json({
+      replies: await suggestReplies(source.text, {
+        url,
+        model,
+        key: process.env.REPLY_AI_KEY,
+      }),
+    });
+  } catch {
+    res.json({ replies: [] });
+  }
+});
 app.post("/api/glasses/chats/:id/read", async (req, res) => {
   const id = req.body.messageId;
   const h = await service.accountHistory(req.params.id, "", Number(id) + 1);

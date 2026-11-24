@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { Store } from "../server/store.js";
 import { DemoPersonal } from "../server/personal/demo.js";
 import { PersonalService } from "../server/personal/service.js";
+import { page } from "../src/glasses/display.js";
 import { GlassesApp, wrap, type Request } from "../src/glasses/controller.js";
 test("glasses account scope browses unwatched own dialogs but rejects arbitrary peers", async () => {
   const db = new Store(":memory:"),
@@ -66,35 +67,29 @@ test("glasses composer never sends during selection/review/cancellation; only fi
     throw Error(path);
   };
   const app = new GlassesApp(api, () => {});
-  const choose = async (text: string) => {
-    const index = app.menu!.rows.findIndex((r) => r.label.includes(text));
-    assert(index >= 0, text);
-    app.menu!.index = index;
-    await app.input("tap");
-  };
   try {
     await app.start();
-    await choose("Unread");
-    await choose("Maya");
-    await app.input("tap");
-    assert.match(app.frame.title, /Reply · Maya/);
-    await choose("Check first");
-    assert.equal(app.frame.body, "I’ll check and get back to you.");
-    assert.equal(p.writes.length, 0);
-    await app.input("back");
-    assert.equal(app.draft, "I’ll check and get back to you.");
-    await app.input("back");
-    await app.input("back");
+    assert.equal(app.frame.title, "Chats");
     assert.equal(app.frame.split?.heading, "Maya");
     await app.input("tap");
+    assert.equal(app.frame.title, "Maya");
     await app.input("tap");
+    assert.equal(app.frame.title, "Reply · Maya");
+    assert.equal(app.frame.body, "I’ll check and get back to you.");
+    await app.input("down");
+    assert.equal(app.frame.body, "Can you share a little more detail?");
+    await app.input("back");
     assert.equal(p.writes.length, 0);
-    await choose("Review draft");
+    await app.input("tap");
+    assert.equal(app.frame.body, "Can you share a little more detail?");
+    assert.equal(p.writes.length, 0);
     await app.input("tap");
     assert.equal(p.writes.length, 1);
     assert.equal(p.writes[0].kind, "reply");
     assert.equal(p.writes[0].messageId, 11);
-    assert.match(app.frame.title, /SYNTHETIC DEMO RECEIPT/);
+    assert.equal(p.writes[0].text, "Can you share a little more detail?");
+    assert.equal(app.frame.title, "Maya");
+    assert.match(app.frame.context ?? "", /Demo Sent/);
   } finally {
     db.close();
   }
@@ -124,18 +119,63 @@ test("long text wraps without dropping letters and review paginates before confi
   assert.equal(writes, 1);
 });
 
-test("back from the glasses keyboard retains typed text in the composer", async () => {
+test("dictation goes from a message to send review, and Back keeps the draft on that source", async () => {
+  const chat = {
+    id: "p",
+    title: "Plans",
+    kind: "group" as const,
+    unread: 0,
+    readMaxId: 1,
+  };
+  const source = {
+    id: 1,
+    chatId: chat.id,
+    sender: "Maya",
+    text: "Meet at 6?",
+    date: 0,
+    outgoing: false,
+    revision: "r1",
+  };
+  let writes = 0;
   const app = new GlassesApp(
-    async () => ({}),
+    async (path) => {
+      if (path === "/glasses/action") writes++;
+      return { chat, messages: [source], hasOlder: false };
+    },
     () => {},
   );
-  app.chat = { id: "x", title: "Test", kind: "dm", unread: 0, readMaxId: 0 };
-  app.inputPurpose = "compose";
-  app.inputText = "Typed with the ring.";
-  app.keyboard();
+  app.voiceEnabled = true;
+  await app.openChat(chat);
+  assert.equal(app.canDictate(), true);
+  app.prepareDictation();
+  await app.voiceText("I’ll be there at six.");
+  assert.equal(app.frame.title, "Send · Plans");
+  assert.equal(app.frame.body, "I’ll be there at six.");
+  assert.equal(app.pending?.messageId, 1);
+  assert.equal(writes, 0);
   await app.input("back");
-  assert.equal(app.draft, "Typed with the ring.");
-  assert.match(app.frame.title, /New message/);
+  assert.equal(app.frame.title, "Plans");
+  await app.input("tap");
+  assert.equal(app.frame.body, "I’ll be there at six.");
+  assert.equal(writes, 0);
+});
+
+test("a split list has a full-screen blank gesture layer and passive visible rows", () => {
+  const layout = page({
+    title: "Search",
+    icon: "chats",
+    badge: "DEMO",
+    context: "1 result",
+    body: "> Maya",
+    footer: "Tap  Open",
+    split: { rows: ["Maya"], index: 0, heading: "Maya", detail: "" },
+  });
+  assert(layout.textObject.length <= 8);
+  const capture = layout.textObject.filter((box) => box.isEventCapture === 1);
+  assert.equal(capture.length, 1);
+  assert.equal(capture[0].containerName, "gestures");
+  assert.equal(capture[0].content, " ");
+  assert.equal(capture[0].height, 288);
 });
 
 test("older pages join the current conversation without losing the newer messages", async () => {
@@ -169,4 +209,42 @@ test("older pages join the current conversation without losing the newer message
   assert.match(app.frame.body, /Message 29/);
   await app.input("down");
   assert.match(app.frame.body, /Message 30/);
+});
+
+test("a late model response adds choices without changing the visible send target", async () => {
+  const chat = {
+    id: "p",
+    title: "Plans",
+    kind: "group" as const,
+    unread: 0,
+    readMaxId: 1,
+  };
+  const source = {
+    id: 1,
+    chatId: chat.id,
+    sender: "Maya",
+    text: "Meet at 6?",
+    outgoing: false,
+    date: 0,
+    revision: "r",
+  };
+  let finish!: (reply: { replies: string[] }) => void;
+  const model = new Promise<{ replies: string[] }>((resolve) => {
+    finish = resolve;
+  });
+  const app = new GlassesApp(
+    async (path) =>
+      path.endsWith("reply-ideas") ? model : { chat, messages: [source] },
+    () => {},
+  );
+  app.replyIdeasEnabled = true;
+  await app.openChat(chat);
+  await app.input("tap");
+  const displayed = app.frame.body;
+  finish({ replies: ["Does six still work?"] });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(app.frame.body, displayed);
+  await app.input("up");
+  assert.equal(app.frame.body, "Does six still work?");
+  assert.match(app.frame.badge ?? "", /^AI /);
 });

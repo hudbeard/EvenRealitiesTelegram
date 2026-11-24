@@ -6,10 +6,11 @@ import {
 } from "@evenrealities/even_hub_sdk";
 import { GlassesApp, type Frame, type Input } from "./controller.js";
 import { GlassesDisplay } from "./display.js";
+import { GlassesMicrophone, type VoiceMode } from "./voice.js";
 import "./style.css";
 const host = document.getElementById("app")!;
 host.innerHTML =
-  '<main><header><span class="brand">FIELDLINE</span><span>Telegram for your glasses</span></header><section class="intro"><p class="eyebrow">YOUR CONVERSATIONS. HEADS UP.</p><h1>Telegram lives here.</h1><p>Browse, read, write and respond using your G2 or R1 controls. This screen mirrors the glasses. Your phone is only needed for setup and to host Even Hub.</p></section><section class="display" aria-label="Glasses display mirror"><div class="display-head"><img id="screen-icon" alt="" width="26" height="26"><h2 id="title"></h2><span id="badge"></span></div><div class="screen-content"><p id="context" hidden></p><pre id="body"></pre><div id="split" hidden><div id="rows"></div><div class="screen-preview"><strong id="preview-title"></strong><pre id="preview-detail"></pre></div></div></div><p id="footer"></p></section><p id="status" role="status">Connecting…</p><nav aria-label="Simulator controls"><button data-input="up" aria-label="Swipe up">↑<small>Previous</small></button><button data-input="tap">●<small>Tap / open</small></button><button data-input="down" aria-label="Swipe down">↓<small>Next</small></button><button data-input="back">↩<small>Double / back</small></button></nav><p class="hint">Swipe to select · Tap to open · Double tap to go back<br>Hold to dictate while composing or searching</p><details><summary>Account setup & server</summary><p>The backend holds your personal Telegram session. Run <code>npm run personal:login</code> on your server, then approve the pairing code shown in your glasses with <code>npm run personal:approve -- CODE</code>. Never paste Telegram login codes into this page.</p><p>Voice needs a configured speech-to-text endpoint. The glasses keyboard works without it.</p><a href="personal.html">Open optional companion workspace</a></details></main>';
+  '<main><header><span class="brand">FIELDLINE</span><span>Telegram for your glasses</span></header><section class="intro"><p class="eyebrow">YOUR CONVERSATIONS. HEADS UP.</p><h1>Telegram lives here.</h1><p>Browse, read, write and respond using your G2 or R1 controls. This screen mirrors the glasses. Your phone is only needed for setup and to host Even Hub.</p></section><section class="display" aria-label="Glasses display mirror"><div class="display-head"><img id="screen-icon" alt="" width="26" height="26"><h2 id="title"></h2><span id="badge"></span></div><div class="screen-content"><p id="context" hidden></p><pre id="body"></pre><div id="split" hidden><div id="rows"></div><div class="screen-preview"><strong id="preview-title"></strong><pre id="preview-detail"></pre></div></div></div><p id="footer"></p></section><p id="status" role="status">Connecting…</p><nav aria-label="Simulator controls"><button data-input="up" aria-label="Swipe up">↑<small>Previous</small></button><button data-input="tap">●<small>Tap / open</small></button><button data-input="down" aria-label="Swipe down">↓<small>Next</small></button><button data-input="back">↩<small>Double / back</small></button></nav><p class="hint">Swipe to select · Tap to open · Double tap to go back<br>Hold to dictate while composing or searching</p><details><summary>Account setup & server</summary><p>The backend holds your personal Telegram session. Run <code>npm run personal:login</code> on your server, then approve the pairing code shown in your glasses with <code>npm run personal:approve -- CODE</code>. Never paste Telegram login codes into this page.</p><p>Voice needs a configured speech-to-text endpoint. Quick replies are available without speech setup.</p><a href="personal.html">Open optional companion workspace</a></details></main>';
 const el = (id: string) => document.getElementById(id)!;
 const apiBase = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
 let token = localStorage.getItem("fieldline.glasses.session") ?? "",
@@ -86,9 +87,14 @@ function render(frame: Frame) {
       });
   }
 }
-const app = new GlassesApp(api, render, async () => {
-  await bridge?.shutDownPageContainer(1);
-});
+const app = new GlassesApp(
+  api,
+  render,
+  async () => {
+    await bridge?.shutDownPageContainer(1);
+  },
+  () => startVoice("toggle"),
+);
 function error(e: unknown) {
   el("status").textContent = (e as Error).message;
   if (!token) {
@@ -156,8 +162,10 @@ async function pollPair() {
   }
 }
 async function input(event: Input, nativeIndex?: number) {
-  if (recording || transcribing) {
-    if (event === "back") await cancelVoice();
+  if (mic.busy) {
+    if (event === "back") await mic.cancel();
+    else if (event === "tap" && mic.recording && mic.mode === "toggle")
+      await mic.stop();
     return;
   }
   if (!token) {
@@ -192,101 +200,64 @@ document
   .forEach(
     (b) => (b.onclick = () => safe(() => input(b.dataset.input as Input))),
   );
-let recording = false,
-  transcribing = false,
-  chunks: Uint8Array[] = [],
-  size = 0,
-  micTimer: ReturnType<typeof setTimeout> | undefined;
-let transcript: AbortController | undefined;
-async function cancelVoice() {
-  transcript?.abort();
-  await stopVoice(true);
-}
-async function startVoice() {
-  if (!token || !app.active || recording || transcribing || app.busy) return;
-  if (!bridge || !app.canDictate()) return;
-  if (!app.voiceEnabled) {
-    app.notice(
-      "VOICE UNAVAILABLE",
-      "Use the glasses keyboard.\nConfigure a speech-to-text endpoint on your server to enable dictation.",
-      () => app.keyboard(),
-    );
-    return;
-  }
-  app.prepareDictation();
-  recording = true;
-  chunks = [];
-  size = 0;
-  try {
-    if (!(await bridge.audioControl(true, AudioInputSource.Glasses)))
-      throw new Error("Microphone unavailable");
-    if (!recording) return;
+const mic = new GlassesMicrophone({
+  control: (enabled) => bridge!.audioControl(enabled, AudioInputSource.Glasses),
+  listening: (mode) =>
     render({
-      title: "LISTENING",
-      body: "Speak your message.\n\nRelease to transcribe.\nDouble tap to discard.\nNothing sends automatically.",
-      footer: "Hold: record · Release: transcribe",
+      title: "Listening",
+      body:
+        app.inputPurpose === "chats"
+          ? "Say a chat name."
+          : app.inputPurpose === "messages"
+            ? "Say what to find in this chat."
+            : "Speak your message.",
+      footer:
+        (mode === "hold" ? "Release  Done" : "Tap  Done") +
+        "     Double tap  Cancel",
       icon: "mic",
-    });
-    micTimer = setTimeout(() => safe(() => stopVoice()), 30000);
-  } catch {
-    recording = false;
-    throw new Error("Could not start the glasses microphone.");
-  }
-}
-async function stopVoice(discard = false) {
-  if (!recording) return;
-  clearTimeout(micTimer);
-  recording = false;
-  transcribing = true;
-  transcript = new AbortController();
-  try {
-    await bridge?.audioControl(false);
-    if (discard || transcript.signal.aborted || !running || size < 3200) {
-      if (running) render(app.frame);
-      return;
-    }
+    }),
+  processing: () =>
     render({
-      title: "TRANSCRIBING",
-      body: "Preparing your draft…\n\nReview it before sending.",
-      footer: "Nothing sends automatically",
+      title: "Transcribing",
+      body: "Preparing your words…",
+      footer: "Double tap  Cancel",
       icon: "mic",
+    }),
+  transcribe: async (pcm, signal) => {
+    const response = await fetch(apiBase + "/api/transcribe", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer " + token,
+        "content-type": "application/octet-stream",
+      },
+      body: pcm,
+      signal: AbortSignal.any([signal, AbortSignal.timeout(22000)]),
     });
-    const pcm = new Uint8Array(size);
-    let offset = 0;
-    for (const chunk of chunks) {
-      pcm.set(chunk, offset);
-      offset += chunk.length;
-    }
-    const r = await fetch(apiBase + "/api/transcribe", {
-        method: "POST",
-        headers: {
-          authorization: "Bearer " + token,
-          "content-type": "application/octet-stream",
-        },
-        body: pcm,
-        signal: AbortSignal.any([
-          transcript.signal,
-          AbortSignal.timeout(22000),
-        ]),
-      }),
-      d = await r.json();
-    if (!r.ok) throw new Error(d.error ?? "Transcription unavailable.");
-    if (running && !transcript.signal.aborted) app.voiceText(d.text);
-  } catch (error) {
-    if (!transcript?.signal.aborted) throw error;
+    const result = await response.json();
+    if (!response.ok || typeof result.text !== "string" || !result.text.trim())
+      throw new Error(result.error ?? "Couldn’t hear that. Try again.");
+    return result.text;
+  },
+  draft: (text) => app.voiceText(text),
+  restore: () => {
     if (running) render(app.frame);
-  } finally {
-    transcript = undefined;
-    transcribing = false;
-    chunks = [];
-    size = 0;
+  },
+  error,
+});
+
+async function startVoice(mode: VoiceMode = "hold") {
+  if (!token || !app.active || !bridge || !app.voiceEnabled || mic.busy) return;
+  if (mode === "hold") {
+    if (app.busy || !app.canDictate()) return;
+    app.prepareDictation();
   }
+  await mic.start(mode);
 }
 function stop() {
   running = false;
   app.active = false;
   clearTimeout(pairTimer);
-  safe(cancelVoice);
+  safe(() => mic.cancel());
 }
 window.addEventListener("pagehide", stop);
 safe(async () => {
@@ -312,21 +283,11 @@ void (async () => {
     display = renderer;
     el("status").textContent = "G2 connected · navigate from glasses";
     bridge.onEvenHubEvent((e) => {
-      if (e.audioEvent && recording) {
-        const chunk = new Uint8Array(e.audioEvent.audioPcm);
-        if (size + chunk.length <= 960000) {
-          chunks.push(chunk);
-          size += chunk.length;
-        } else safe(() => stopVoice());
-      }
+      if (e.audioEvent && mic.accept(e.audioEvent.audioPcm))
+        safe(() => mic.stop());
       const menuId = e.menuItemClickEvent?.itemID;
       if (menuId !== undefined) {
-        if (
-          running &&
-          display?.visibleFrame === current &&
-          !recording &&
-          !transcribing
-        )
+        if (running && display?.visibleFrame === current && !mic.busy)
           safe(() => app.selectShortcut(menuId));
         return;
       }
@@ -353,17 +314,15 @@ void (async () => {
       if (type === OsEventTypeList.FOREGROUND_EXIT_EVENT) {
         if (foregroundOverlay) {
           foregroundOverlay = false;
-          safe(cancelVoice);
         } else stop();
         return;
       }
       if (!running) return;
       if (type === OsEventTypeList.LONG_PRESS_RELEASE_EVENT) {
-        safe(() => stopVoice());
+        if (mic.mode === "hold") safe(() => mic.stop());
         return;
       }
-      if (display?.visibleFrame !== current && !recording && !transcribing)
-        return;
+      if (display?.visibleFrame !== current && !mic.busy) return;
       if (type === OsEventTypeList.LONG_PRESS_EVENT) {
         safe(startVoice);
         return;

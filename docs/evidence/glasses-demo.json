@@ -2,77 +2,62 @@
   "source": "official Even Hub simulator framebuffer captures",
   "synthetic": true,
   "liveTelegram": false,
-  "durationSeconds": 112,
+  "durationSeconds": 88,
   "scenes": [
     [
-      "01-home",
-      "Start with the unread inbox.",
-      "Use the ring or glasses touchpad to choose where to go."
+      "01-inbox",
+      "Open straight to chats.",
+      "Unread conversations come first, with a preview beside the selected chat."
     ],
     [
-      "02-chats",
-      "Preview a chat as you swipe.",
-      "The right pane shows the chat type, unread count, and latest message."
+      "02-inbox-scrolled",
+      "Swipe through chats without moving the top row.",
+      "A blank layer captures swipes while the visible rows stay in place."
     ],
     [
       "03-thread",
-      "Read the message and its context.",
-      "A short message opens reply choices with one tap."
+      "One tap opens the conversation.",
+      "Tap the message for reply ideas or hold to dictate directly."
     ],
     [
-      "04-compose",
-      "Choose the intent and see the exact phrase.",
-      "Reply choices use the message context. You can also type or dictate."
+      "04-quick-reply",
+      "The first tap opens a ready-to-send reply.",
+      "Model suggestions are shown here using a local fixture and synthetic chats."
     ],
     [
-      "08e-plan-reply",
-      "Confirm the new time in a changed plan.",
-      "A suggested question can reuse a time mentioned in the source."
+      "05-second-idea",
+      "Swipe to read another reply.",
+      "The same card shows the source and the exact outgoing text."
     ],
     [
-      "05-review",
-      "Review the destination, source, and reply.",
-      "Tap to send. Double tap to return to the editable draft."
+      "06-inline-receipt",
+      "The second tap sends and returns to the thread.",
+      "The reply appears with its receipt. Double tap before sending to keep a draft."
     ],
     [
-      "06-receipt",
-      "See a receipt, then return to the sent reply.",
-      "Synthetic demo. The simulator sends no real Telegram messages."
-    ],
-    [
-      "06a-shortcuts",
-      "Open the system shortcut menu.",
-      "Tap then hold to jump to message actions, search, or the next unread chat."
-    ],
-    [
-      "07a-keyboard",
-      "Write with the ring keyboard.",
-      "Select a letter group, choose a character, then finish or keep typing."
-    ],
-    [
-      "07-keyboard-message",
-      "Review a typed message before sending.",
-      "This test typed the lowercase letter b using the native character picker."
+      "07-shortcuts",
+      "Jump to actions from the native menu.",
+      "Find in chat, dictate a new message, or skip directly to the next unread chat."
     ],
     [
       "08-saved",
-      "Open your Saved Messages.",
-      "Send a copy of a message to your own Telegram notebook."
+      "Open Saved Messages directly.",
+      "The inbox shortcut opens your personal Telegram notebook."
     ],
     [
-      "08a-native-picker",
-      "Choose a reaction with native list focus.",
-      "The firmware handles list scrolling and selection."
+      "09-reacted",
+      "See actions confirmed in the conversation.",
+      "The receipt appears inline after you review and confirm a reaction."
     ],
     [
-      "08c-search-empty",
-      "Search and return to your place.",
-      "Double tap from results to restore the message you were reading."
+      "10-plan-idea",
+      "Ask about the specific change.",
+      "This reply uses the time mentioned in the original message."
     ],
     [
-      "10-controls",
-      "Gestures stay consistent across the app.",
-      "Use the Even phone app to host the bridge. Your server maintains the Telegram session."
+      "11-controls",
+      "Hold to speak, release to review.",
+      "Voice search opens results directly. Dictated messages wait for a send tap."
     ]
   ]
 }

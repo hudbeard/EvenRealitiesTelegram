@@ -4,20 +4,20 @@ A glasses-first personal Telegram client for Even Realities G2 and the R1 ring. 
 
 ![Actual G2 home framebuffer](docs/media/glasses-home.png)
 
-[112-second glasses-first simulator walkthrough](docs/media/fieldline-glasses-demo.mp4) · [Inbox preview](docs/media/glasses-inbox.png) · [Reply review](docs/media/glasses-review.png) · [Server setup](docs/standalone.md)
+[88-second glasses-first simulator walkthrough](docs/media/fieldline-glasses-demo.mp4) · [Inbox preview](docs/media/glasses-inbox.png) · [Reply review](docs/media/glasses-review.png) · [Server setup](docs/standalone.md)
 
 **Status:** glasses-only synthetic simulator flows verified; personal Telegram adapter implemented. Real account delivery, live dictation, physical G2 testing, public server deployment, and DoraHacks submission remain unverified.
 
 ## What happens on the glasses
 
-- **Inbox.** Open unread chats first, browse all chats with a message preview, or resume the last message you were reading. Search on G2 and return to the same position.
+- **Inbox.** Launch directly into chats, with unread conversations first. Swipe to preview and tap to open. Hold in Chats to find a conversation by voice.
 - **Threads:** swipe messages, paginate full text, inspect the original replied-to message, search history and load older messages. Media is identified; view rich media in Telegram.
-- **Replies.** Tap a short message to see reply choices based on its text, type with the ring keyboard, or hold to dictate when speech is configured. The review shows the recipient, source quote, and exact outgoing text. Double tap to keep an editable draft.
+- **Replies.** Tap an open message to see a ready-to-send reply and swipe for alternatives. Tap again to send the exact text shown and return to the conversation. Hold to dictate and release to review. Double tap keeps the draft attached to the source.
 - **Actions:** reply as yourself, write a new message, react with thumbs up/heart/check, or forward to Saved Messages. Cancellation preserves a draft. Missing receipts stay uncertain; writes are not automatically retried.
 - **Catch-up:** source-linked changes, unanswered questions, replies and your stated commitments. Read the evidence and open the underlying conversation. Manage its ten-chat selection entirely on G2.
 - **Saved Messages:** a real Telegram self-chat, readable and writable from the glasses.
 
-Swipe to select, tap to open, and double tap to go back. Tap then hold for Even Hub shortcuts such as New message, Find in chat, and Next unread chat. Hold to dictate where enabled. Double tap at the Telegram home screen to open the system exit confirmation. The G2 display uses separate context and preview areas, brightness for focus, and native pickers for reactions and characters.
+Swipe to select, tap to open, and double tap to go back. Tap then hold for Even Hub shortcuts such as New message, Find in chat, and Next unread chat. Hold on a message to dictate. Model-backed suggestions are optional and fall back to built-in replies. Double tap at the Telegram home screen to open the system exit confirmation. The G2 display uses separate context and preview areas, brightness for focus, and native pickers for reactions and characters.
 
 ## Run the standalone app
 
@@ -46,6 +46,12 @@ npm run personal:approve -- CODE
 
 The account session stays in the ignored .data/personal.session. Do not share it or your credentials. A bot token is not used by this client. Login and real Telegram writes have not been tested with owner credentials yet.
 
+## Dictation and reply ideas
+
+Set `STT_API_URL` to a Whisper-compatible transcription URL. The optional `STT_API_KEY` and `STT_MODEL` live on the server.
+
+For model-backed suggestions, set `REPLY_AI_URL` to an OpenAI-compatible Chat Completions endpoint that supports JSON Schema output and `max_tokens`. Set `REPLY_AI_MODEL` and, if required, `REPLY_AI_KEY`. The server shares an excerpt of the selected message with this provider when you open reply ideas. You can use a local provider such as [Ollama](https://docs.ollama.com/api/openai-compatibility). The model adds short follow-up questions. Built-in acknowledgements remain available, including when the model is slow or unavailable.
+
 ## Server and package
 
 [Backend deployment and API](docs/standalone.md) explains local production execution, the Docker image, persistent storage, API endpoints and the device package. The server serves both the API and the app assets. It is a single-owner backend.
@@ -59,7 +65,7 @@ docker build -t fieldline .
 npm run pack
 ```
 
-Use a reachable HTTPS server for actual glasses. Set FIELDLINE_BACKEND_URL before packing and PERSONAL_ORIGIN on the backend. The packer generates the exact network whitelist. Set FIELDLINE_VOICE=true to include microphone permission when your STT endpoint is configured. Localhost packages only work with the local simulator; the phone's localhost is not your computer.
+Use a reachable HTTPS server for actual glasses. Set FIELDLINE_BACKEND_URL before packing and PERSONAL_ORIGIN on the backend. The packer generates the exact network whitelist. The package requests microphone permission by default. Set FIELDLINE_VOICE=false when packaging a setup without dictation. Localhost packages only work with the local simulator; the phone's localhost is not your computer.
 
 G2 still requires the Even phone app as its SDK/Bluetooth host. “Standalone” here describes the complete glasses interaction flow, with a separate server for Telegram—not independent cellular hardware inside G2.
 
@@ -73,7 +79,7 @@ npm run server:build
 npm run glasses:test
 ```
 
-23 automated tests cover source revision binding, single dispatch, ambiguous delivery, account-wide access boundaries, exact new-message text, Saved Messages, read state, speech formatting, review pagination and cancellation. The glasses smoke test drives official SDK gestures and captures actual 576×288 framebuffers. It covers pairing, unread previews, native shortcuts and list focus, exact replies and cancellation, a plan-specific reply option, keyboard entry, Saved Messages, reactions, search return, and settings. No real Telegram messages are sent by these tests.
+28 automated tests cover source revision binding, single dispatch, ambiguous delivery, account-wide access boundaries, exact new-message text, Saved Messages, read state, speech formatting, review pagination and cancellation. The glasses smoke test drives official SDK gestures and captures actual 576×288 framebuffers. It verifies that the blank layer owns list swipes, the app opens directly to unread chats, and two taps produce one exact reply and an inline receipt. It also covers cancellation, plan-specific suggestions, Saved Messages, and native reaction selection. No real Telegram messages are sent by these tests.
 
 [Glasses-first verification and setup](docs/standalone.md) · [Submission draft](docs/submission-draft.md) · [Earlier personal prototype](docs/personal-account.md) · [Original bot prototype](docs/crew-prototype.md)
 

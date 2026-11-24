@@ -38,33 +38,34 @@ function text(
   });
 }
 
-function page(frame: Frame) {
+export function page(frame: Frame) {
   const y = frame.context ? 82 : 51;
   const height = 245 - y;
+  const badge = frame.split && frame.context ? undefined : frame.badge;
   const textObject = [
+    ...(!frame.native?.length
+      ? [text(10, "gestures", 0, 0, 576, 288, " ", 0, { isEventCapture: 1 })]
+      : []),
     text(
       1,
       "title",
       46,
       10,
-      frame.badge ? 405 : 518,
+      badge ? 405 : 518,
       34,
-      fitLine(frame.title, frame.badge ? 400 : 510),
+      fitLine(frame.title, badge ? 400 : 510),
       4,
     ),
-    text(
-      2,
-      "badge",
-      459,
-      10,
-      106,
-      35,
-      fitLine(frame.badge ?? "", 95),
-      2,
-      frame.badge
-        ? { paddingLength: 2, borderWidth: 1, borderRadius: 5, borderColor: 4 }
-        : {},
-    ),
+    ...(badge
+      ? [
+          text(2, "badge", 459, 10, 106, 35, fitLine(badge, 95), 2, {
+            paddingLength: 2,
+            borderWidth: 1,
+            borderRadius: 5,
+            borderColor: 4,
+          }),
+        ]
+      : []),
     text(
       3,
       "footer",
@@ -116,7 +117,7 @@ function page(frame: Frame) {
           39,
           label ? (selected ? "▶ " : "   ") + fitLine(label, 188) : " ",
           selected ? 4 : 2,
-          { paddingLength: 3, isEventCapture: index === 0 ? 1 : 0 },
+          { paddingLength: 3 },
         ),
       );
     }
@@ -137,7 +138,6 @@ function page(frame: Frame) {
   } else {
     textObject.push(
       text(6, "body", 12, y, 552, height, frame.body, 4, {
-        isEventCapture: 1,
         ...(frame.icon === "send"
           ? {
               paddingLength: 8,

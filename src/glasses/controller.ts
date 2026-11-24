@@ -23,6 +23,7 @@ type Row = {
   label: string;
   detail?: string;
   preview?: string;
+  chatId?: string;
   run: () => void | Promise<void>;
 };
 type Back = () => void | Promise<void>;
@@ -79,9 +80,11 @@ const shortcut = {
   newMessage: { id: 3, label: "New message" },
   findMessage: { id: 4, label: "Find in chat" },
   messageActions: { id: 5, label: "Message actions" },
-  editDraft: { id: 6, label: "Edit draft" },
   nextUnread: { id: 7, label: "Next unread chat" },
-  keyboardDone: { id: 8, label: "Finish typing" },
+  saved: { id: 8, label: "Saved Messages" },
+  catchup: { id: 9, label: "Open catch-up" },
+  settings: { id: 10, label: "Settings" },
+  redictate: { id: 11, label: "Dictate again" },
 };
 export class GlassesApp {
   frame: Frame = {
@@ -94,6 +97,7 @@ export class GlassesApp {
   busy = false;
   synthetic = false;
   voiceEnabled = false;
+  replyIdeasEnabled = false;
   active = true;
   chats: Chat[] = [];
   watched: string[] = [];
@@ -111,20 +115,23 @@ export class GlassesApp {
   onReadBack = async () => {};
   draft = "";
   reply?: Source;
-  composeFocus = 0;
+  private quick:
+    | {
+        source: Source;
+        choices: { text: string; ai?: boolean }[];
+        index: number;
+      }
+    | undefined;
+  private ideas = new Map<string, Promise<string[]>>();
   readContext?: string;
   readBadge?: string;
   readAction = "Continue";
   threadBack: Back = () => this.chatList();
-  inputBack: Back = () => this.chatList();
   drafts = new Map<string, string>();
-  lastChatId?: string;
-  private lastMessageByChat = new Map<string, number>();
   private searchOrigin?: number;
+  private chatSearchOrigin?: string;
   private readThrough = new Map<string, number>();
   inputPurpose: "compose" | "chats" | "messages" = "compose";
-  inputText = "";
-  uppercase = false;
   pending?: PersonalAction;
   operationId = "";
   pendingRevision = "";
@@ -133,6 +140,7 @@ export class GlassesApp {
     public api: Request,
     public changed: (frame: Frame) => void,
     public exit: () => Promise<void> = async () => {},
+    public record: () => Promise<void> = async () => {},
   ) {}
   emit(frame: Frame) {
     this.frame = frame;
@@ -167,17 +175,14 @@ export class GlassesApp {
     const rows = menu.rows.slice(start, start + visibleCount);
     const selected = menu.rows[menu.index];
     const shortcuts =
-      menu.icon === "keyboard"
-        ? menu.native
-          ? []
-          : [shortcut.keyboardDone]
-        : ["telegram", "chats"].includes(menu.icon)
-          ? [shortcut.findChat]
-          : menu.icon === "compose"
-            ? [shortcut.editDraft, shortcut.messageActions].filter(
-                (item) => item !== shortcut.messageActions || this.reply,
-              )
-            : [];
+      menu.icon === "chats"
+        ? [
+            ...(this.voiceEnabled ? [shortcut.findChat] : []),
+            shortcut.saved,
+            shortcut.catchup,
+            shortcut.settings,
+          ]
+        : [];
     this.emit({
       title: menu.title,
       icon: menu.icon,
@@ -207,6 +212,7 @@ export class GlassesApp {
     const h = await this.api("/health");
     this.synthetic = h.synthetic;
     this.voiceEnabled = h.voiceEnabled;
+    this.replyIdeasEnabled = h.replyIdeasEnabled === true;
     await this.home();
   }
   async refresh() {
@@ -216,145 +222,101 @@ export class GlassesApp {
   }
   async home() {
     await this.refresh();
-    const unread = this.chats.filter((chat) => chat.unread);
-    const last = this.chats.find((chat) => chat.id === this.lastChatId);
-    this.showMenu(
-      "Telegram",
-      "telegram",
-      [
-        ...(unread.length
-          ? [
-              {
-                label: "Unread",
-                detail:
-                  unread.reduce((sum, chat) => sum + chat.unread, 0) +
-                  " new messages in " +
-                  unread.length +
-                  (unread.length === 1 ? " chat" : " chats"),
-                run: () => this.chatList("", true),
-              },
-            ]
-          : []),
-        {
-          label: "All chats",
-          detail: this.chats.length + " conversations",
-          run: () => this.chatList(),
-        },
-        ...(last
-          ? [
-              {
-                label: "Resume chat",
-                preview: last.title,
-                detail: "Return to the conversation you last opened.",
-                run: () =>
-                  this.openChat(
-                    last,
-                    "",
-                    this.lastMessageByChat.get(last.id),
-                    undefined,
-                    () => this.home(),
-                  ),
-              },
-            ]
-          : []),
-        {
-          label: "Catch-up",
-          detail: "See what changed and who needs a reply.",
-          run: () => this.catchup(),
-        },
-        {
-          label: "Saved Messages",
-          detail: "Open your personal Telegram notebook.",
-          run: async () => {
-            const saved = await this.api("/glasses/saved");
-            await this.openChat(saved, "", undefined, undefined, () =>
-              this.home(),
-            );
-          },
-        },
-        {
-          label: "Catch-up chats",
-          detail: this.watched.length + " of 10 selected",
-          run: () => this.watchlist(),
-        },
-        {
-          label: "Settings",
-          detail: "Controls, connection and sign out",
-          run: () => this.connection(),
-        },
-      ],
-      () => this.exit(),
-      0,
-      {
-        badge: this.synthetic ? "DEMO" : "ONLINE",
-        footer: "Swipe  Select     Tap  Open     Double tap  Exit",
-      },
-    );
+    this.chatList();
+  }
+  async openSaved() {
+    const saved = await this.api("/glasses/saved");
+    await this.openChat(saved, "", undefined, undefined, () => this.chatList());
   }
   chatList(filter = "", unreadOnly = false, focusId?: string) {
-    const matches = this.chats.filter(
+    const ordered = this.chats
+      .filter((chat) => chat.unread)
+      .concat(this.chats.filter((chat) => !chat.unread));
+    const matches = ordered.filter(
       (chat) =>
         (!unreadOnly || chat.unread > 0 || chat.id === focusId) &&
         chat.title.toLowerCase().includes(filter.toLowerCase()),
     );
     const backToList = (id?: string) => this.chatList(filter, unreadOnly, id);
     this.showMenu(
-      filter ? "Chat search" : unreadOnly ? "Unread chats" : "All chats",
+      filter ? "Chat search" : "Chats",
       "chats",
       [
         ...matches.map((chat) => ({
           label: (chat.unread ? "● " : "") + chat.title,
           preview: chat.title,
+          chatId: chat.id,
           detail:
             (chat.kind === "dm"
               ? "Direct message"
               : chat.kind === "group"
                 ? "Group"
                 : "Channel") +
-            "\n" +
+            " · " +
             (chat.unread ? chat.unread + " unread" : "Up to date") +
-            (chat.preview ? "\n" + chat.preview.replace(/\s+/g, " ") : ""),
+            (chat.preview ? "\n\n" + chat.preview.replace(/\s+/g, " ") : ""),
           run: () =>
             this.openChat(chat, "", undefined, undefined, () =>
               backToList(chat.id),
             ),
         })),
-        {
-          label: "Find a conversation",
-          detail: "Search by chat name using the glasses keyboard.",
-          run: () => this.startInput("chats", backToList),
-        },
+        ...(this.voiceEnabled
+          ? [
+              {
+                label: "Find a chat",
+                detail: "Say the name of a chat.",
+                run: () => this.startSearch("chats"),
+              },
+            ]
+          : []),
         ...(filter || unreadOnly
           ? [
               {
-                label: "Show all chats",
-                detail: "Return to the complete inbox.",
+                label: "All chats",
+                detail: "Clear the filter.",
                 run: () => this.chatList(),
               },
             ]
           : []),
         {
+          label: "Saved Messages",
+          detail: "Open your Telegram notebook.",
+          run: () => this.openSaved(),
+        },
+        {
+          label: "Catch-up",
+          detail: "See changes, questions, and commitments.",
+          run: () => this.catchup(),
+        },
+        {
           label: "Refresh",
-          detail: "Check for new conversations and unread messages.",
+          detail: "Check for new conversations and messages.",
           run: async () => {
             await this.refresh();
             backToList(focusId);
           },
         },
+        {
+          label: "Settings",
+          detail: "Controls, connection, and catch-up chats.",
+          run: () => this.connection(),
+        },
       ],
-      () => this.home(),
+      filter || unreadOnly
+        ? () => this.chatList("", false, this.chatSearchOrigin)
+        : () => this.exit(),
       Math.max(
         0,
         matches.findIndex((chat) => chat.id === focusId),
       ),
       {
+        badge: this.synthetic ? "DEMO" : undefined,
         context: filter
-          ? "Results for “" +
-            short(filter, 30) +
-            "” · " +
-            matches.length +
-            " found"
+          ? "“" + short(filter, 30) + "” · " + matches.length + " found"
           : undefined,
+        footer: this.voiceEnabled
+          ? "Swipe  Chats    Tap  Open    Hold  Find"
+          : "Swipe  Chats    Tap  Open    Tap+hold  Menu",
       },
     );
   }
@@ -382,7 +344,6 @@ export class GlassesApp {
     const row = this.chats.findIndex((item) => item.id === chat.id);
     if (row >= 0 && d.chat) this.chats[row] = d.chat;
     if (back) this.threadBack = back;
-    this.lastChatId = chat.id;
     const older: Source[] = d.messages;
     this.messages = before
       ? [...older, ...this.messages.filter((message) => message.id >= before)]
@@ -437,7 +398,7 @@ export class GlassesApp {
       this.threadBack,
     );
   }
-  async thread() {
+  async thread(status?: string) {
     this.mode = "thread";
     this.menu = undefined;
     const c = this.chat!,
@@ -459,17 +420,20 @@ export class GlassesApp {
       this.emit({
         title: short(c.title),
         icon: "compose",
-        body:
-          (total
-            ? "End of conversation"
-            : "No messages" + (this.query ? " match your search" : "")) +
-          "\n\n> Conversation options\n  Write · search · refresh",
-        footer: "Tap  Options     Double tap  Back",
+        body: this.query
+          ? "No messages match your search."
+          : total
+            ? "You’re at the latest message."
+            : "No messages yet.",
+        footer: this.query
+          ? "Double tap  Clear search"
+          : this.voiceEnabled && c.kind !== "channel"
+            ? "Tap  Dictate new     Double tap  Back"
+            : "Double tap  Back    Tap+hold  Menu",
         shortcuts: this.threadShortcuts(),
       });
       return;
     }
-    if (!this.query) this.lastMessageByChat.set(c.id, m.id);
     const date = new Date(m.date).toLocaleTimeString([], {
       hour: "numeric",
       minute: "2-digit",
@@ -488,6 +452,7 @@ export class GlassesApp {
       badge: this.messageIndex + 1 + " / " + total,
       icon: c.kind === "dm" ? "user" : c.kind === "group" ? "users" : "channel",
       context:
+        (status ? status + " · " : "") +
         m.sender +
         " · " +
         date +
@@ -498,7 +463,11 @@ export class GlassesApp {
         (this.query ? " · SEARCH RESULT" : ""),
       body: lines.slice(0, 5).join("\n") + quote,
       footer:
-        "Swipe  Move   Tap  " + action + "   Double  Back   Tap+hold  Menu",
+        "Swipe  Messages   Tap  " +
+        action +
+        (this.voiceEnabled && c.kind !== "channel"
+          ? "   Hold  Dictate"
+          : "   Tap+hold  Menu"),
       shortcuts: this.threadShortcuts(m, lines.length <= 5),
     });
   }
@@ -510,27 +479,60 @@ export class GlassesApp {
   threadShortcuts(message?: Source, fullyVisible = false) {
     return [
       ...(message && fullyVisible ? [shortcut.messageActions] : []),
-      ...(this.chat?.kind !== "channel" ? [shortcut.newMessage] : []),
-      shortcut.findMessage,
+      ...(this.voiceEnabled
+        ? [
+            ...(this.chat?.kind !== "channel" ? [shortcut.newMessage] : []),
+            shortcut.findMessage,
+          ]
+        : []),
       shortcut.nextUnread,
       shortcut.inbox,
     ];
   }
   canDictate() {
-    return this.mode === "thread"
-      ? this.voiceEnabled &&
-          !!this.chat &&
-          this.chat.kind !== "channel" &&
-          !!this.messages[this.messageIndex] &&
-          this.messageLines(this.messages[this.messageIndex]).length <= 5
-      : (this.mode === "read" && this.readIcon === "mic") ||
-          (this.mode === "menu" &&
-            ["compose", "keyboard"].includes(this.menu?.icon ?? ""));
+    if (!this.voiceEnabled) return false;
+    if (this.mode === "menu") return this.menu?.icon === "chats";
+    if (this.mode === "thread")
+      return this.chat?.kind !== "channel" && !!this.chat;
+    if (this.mode === "quick") return true;
+    return (
+      this.mode === "read" &&
+      this.readIcon === "send" &&
+      (this.pending?.kind === "send" || this.pending?.kind === "reply")
+    );
   }
   prepareDictation() {
-    if (this.mode === "thread") {
-      this.compose(this.messages[this.messageIndex], true);
+    if (this.mode === "menu") {
+      this.setChatSearchOrigin();
+      this.inputPurpose = "chats";
+    } else if (this.mode === "thread") {
+      const source = this.messages[this.messageIndex];
+      this.setComposeTarget(source);
+      if (source && this.messageLines(source).length <= 5)
+        void this.acknowledge(source);
+    } else if (this.mode === "quick") {
+      this.setComposeTarget(this.quick!.source);
+    } else {
+      this.inputPurpose = "compose";
     }
+  }
+  private setChatSearchOrigin() {
+    if (this.menu?.title === "Chats")
+      this.chatSearchOrigin = this.menu.rows[this.menu.index]?.chatId;
+  }
+  async startSearch(purpose: "chats" | "messages") {
+    if (!this.voiceEnabled) return;
+    this.inputPurpose = purpose;
+    if (purpose === "chats") this.setChatSearchOrigin();
+    if (purpose === "messages" && !this.query)
+      this.searchOrigin = this.messages[this.messageIndex]?.id;
+    await this.record();
+  }
+  async dictateNew() {
+    if (!this.chat || this.chat.kind === "channel" || !this.voiceEnabled)
+      return;
+    this.setComposeTarget();
+    await this.record();
   }
   async selectShortcut(id: number) {
     if (
@@ -546,13 +548,13 @@ export class GlassesApp {
           this.chatList("", false, this.chat?.id);
           break;
         case 2:
-          this.startInput("chats", () => this.chatList());
+          await this.startSearch("chats");
           break;
         case 3:
-          this.compose(undefined, true);
+          await this.dictateNew();
           break;
         case 4:
-          this.startInput("messages");
+          await this.startSearch("messages");
           break;
         case 5: {
           const source =
@@ -562,9 +564,6 @@ export class GlassesApp {
           if (source) await this.openMessageActions(source);
           break;
         }
-        case 6:
-          this.editDraft();
-          break;
         case 7: {
           await this.refresh();
           const next = this.chats.find(
@@ -581,41 +580,22 @@ export class GlassesApp {
           break;
         }
         case 8:
-          await this.finishInput();
+          await this.openSaved();
+          break;
+        case 9:
+          await this.catchup();
+          break;
+        case 10:
+          this.connection();
+          break;
+        case 11:
+          this.inputPurpose = "compose";
+          await this.record();
           break;
       }
     } finally {
       this.busy = false;
     }
-  }
-  conversationOptions() {
-    this.showMenu(
-      this.chat!.title + " · Options",
-      "message",
-      [
-        ...(this.chat!.kind !== "channel"
-          ? [
-              {
-                label: "Write a new message",
-                detail: "Compose on your glasses",
-                run: () => this.compose(),
-              },
-            ]
-          : []),
-        {
-          label: "Search messages",
-          detail: "Find text in this conversation",
-          run: () => this.startInput("messages"),
-        },
-        {
-          label: this.query ? "Clear search" : "Refresh conversation",
-          detail: "Fetch latest messages",
-          run: () => this.openChat(this.chat!),
-        },
-        { label: "Back to messages", run: () => this.thread() },
-      ],
-      () => this.thread(),
-    );
   }
   read(
     title: string,
@@ -623,7 +603,12 @@ export class GlassesApp {
     icon: string,
     next: () => void | Promise<void>,
     back: Back,
-    options: { context?: string; badge?: string; action?: string } = {},
+    options: {
+      context?: string;
+      badge?: string;
+      action?: string;
+      startPage?: number;
+    } = {},
   ) {
     this.mode = "read";
     this.menu = undefined;
@@ -633,7 +618,7 @@ export class GlassesApp {
     this.readTitle = title;
     this.reading = text;
     this.readIcon = icon;
-    this.page = 0;
+    this.page = options.startPage ?? 0;
     this.onRead = async () => {
       await next();
     };
@@ -655,13 +640,21 @@ export class GlassesApp {
       context: this.readContext,
       body: lines.slice(this.page * size, (this.page + 1) * size).join("\n"),
       icon: this.readIcon,
+      shortcuts:
+        this.voiceEnabled &&
+        this.readIcon === "send" &&
+        this.readAction === "Send now"
+          ? [shortcut.redictate]
+          : [],
       footer:
         this.page < total - 1
           ? "Tap  Next page     Double tap  Back"
           : "Tap  " +
             this.readAction +
             "     Double tap  " +
-            (this.readAction === "Send now" ? "Edit / cancel" : "Back"),
+            (this.readAction === "Send now" && this.voiceEnabled
+              ? "Back · Hold  Dictate again"
+              : "Back"),
     });
   }
   async acknowledge(message: Source) {
@@ -700,9 +693,14 @@ export class GlassesApp {
   }
   async openMessageActions(message: Source) {
     const back =
-      this.mode === "menu" && this.menu?.icon === "compose"
-        ? () => this.composeMenu()
-        : () => this.thread();
+      this.mode === "quick" ? () => this.drawQuickReply() : () => this.thread();
+    if (!message.revision) {
+      const chat = this.chat!;
+      await this.openChat(chat, this.query, message.id);
+      message = this.messages.find((item) => item.id === message.id) ?? message;
+      if (!message.revision)
+        throw new Error("Refresh this chat and try again.");
+    }
     this.messageActions(message, back);
     await this.acknowledge(message);
   }
@@ -711,8 +709,9 @@ export class GlassesApp {
     const channel = this.chat!.kind === "channel";
     const next = async () => {
       if (channel) this.messageActions(message);
-      else this.compose(message, true);
-      await this.acknowledge(message);
+      else if (!message.revision) await this.openMessageActions(message);
+      else await this.quickReply(message);
+      void this.acknowledge(message);
     };
     if (this.messageLines(message).length <= 5) return next();
     this.read(
@@ -721,7 +720,11 @@ export class GlassesApp {
       "message",
       next,
       () => this.thread(),
-      { context: message.sender, action: channel ? "Actions" : "Reply" },
+      {
+        context: message.sender,
+        action: channel ? "Actions" : "Reply",
+        startPage: 1,
+      },
     );
   }
   messageActions(m: Source, back: Back = () => this.thread(), index = 0) {
@@ -739,13 +742,17 @@ export class GlassesApp {
               {
                 label: "Reply",
                 detail: short(m.text, 40),
-                run: () => this.compose(m),
+                run: () => this.quickReply(m),
               },
-              {
-                label: "Write a new message",
-                detail: "Send without a reply link",
-                run: () => this.compose(),
-              },
+              ...(this.voiceEnabled
+                ? [
+                    {
+                      label: "Dictate new message",
+                      detail: "Send without a reply link.",
+                      run: () => this.dictateNew(),
+                    },
+                  ]
+                : []),
             ]
           : []),
         {
@@ -792,11 +799,15 @@ export class GlassesApp {
               },
             ]
           : []),
-        {
-          label: "Search this chat",
-          detail: "Find older messages on glasses",
-          run: () => this.startInput("messages", returnToActions()),
-        },
+        ...(this.voiceEnabled
+          ? [
+              {
+                label: "Search this chat",
+                detail: "Say what to find.",
+                run: () => this.startSearch("messages"),
+              },
+            ]
+          : []),
         { label: "Back to conversation", run: () => this.thread() },
       ],
       back,
@@ -838,267 +849,160 @@ export class GlassesApp {
     if (text) this.drafts.set(this.draftKey(), text);
     else this.drafts.delete(this.draftKey());
   }
-  compose(reply?: Source, direct = false) {
-    if (!this.chat || this.chat.kind === "channel") return;
-    this.reply = reply;
+  setComposeTarget(source?: Source) {
+    this.reply = source;
     this.draft = this.drafts.get(this.draftKey()) ?? "";
     this.inputPurpose = "compose";
-    this.composeFocus = 0;
-    this.composeMenu();
-    // A text-only installation still has a one-tap path to type a new message.
-    if (direct && !reply && !this.draft && !this.voiceEnabled) this.editDraft();
   }
-  editDraft() {
-    this.inputPurpose = "compose";
-    this.inputText = this.draft;
-    this.uppercase = false;
-    this.keyboard();
-  }
-  reviewDraft() {
-    const text = this.draft;
-    if (!text.trim()) return this.editDraft();
-    if (text.length > 4096)
-      throw new Error("The draft exceeds Telegram’s 4,096-character limit.");
-    this.review(
-      {
-        kind: this.reply ? "reply" : "send",
-        chatId: this.chat!.id,
-        messageId: this.reply?.id ?? 0,
-        text,
-      },
-      this.reply?.revision ?? "",
-    );
-  }
-  composeMenu() {
-    const source = this.reply;
-    const suggestions = source && !source.outgoing ? replyChoices(source) : [];
-    this.showMenu(
-      (source ? "Reply · " : "New message · ") + this.chat!.title,
-      "compose",
-      [
-        ...(this.draft
-          ? [
-              {
-                label: "Review draft",
-                detail: this.draft,
-                run: () => this.reviewDraft(),
-              },
-            ]
-          : []),
-        ...suggestions.map(([label, text]) => ({
-          label,
-          preview: "Reply preview",
-          detail: text,
-          run: () => {
-            this.setDraft(text);
-            this.composeFocus = 0;
-            this.reviewDraft();
-          },
-        })),
+  private replyIdeas(source: Source) {
+    const key = JSON.stringify([source.chatId, source.id, source.revision]);
+    let request = this.ideas.get(key);
+    if (!request) {
+      request = this.api(
+        "/glasses/chats/" + encodeURIComponent(source.chatId) + "/reply-ideas",
         {
-          label: this.draft
-            ? "Edit draft"
-            : source
-              ? "Type a reply"
-              : "Type a message",
-          detail: "Enter your own words with the glasses keyboard.",
-          run: () => this.editDraft(),
+          messageId: source.id,
+          revision: source.revision,
         },
-        ...(this.voiceEnabled
-          ? [
-              {
-                label: "Dictate",
-                detail:
-                  "Hold the ring or touchpad to speak. Release to review your transcript.",
-                run: () =>
-                  this.read(
-                    "Dictate",
-                    "Hold to speak. Release for a draft.",
-                    "mic",
-                    () => this.composeMenu(),
-                    () => this.composeMenu(),
-                  ),
-              },
-            ]
-          : []),
-        ...(!source
-          ? []
-          : [
-              {
-                label: "More actions",
-                detail: "React, save, read the original, or search this chat.",
-                run: () =>
-                  this.messageActions(source, () => this.composeMenu()),
-              },
-            ]),
-        ...(this.draft
-          ? [
-              {
-                label: "Discard draft",
-                detail: "Clear the text for this message.",
-                run: () => {
-                  this.setDraft("");
-                  this.composeFocus = 0;
-                  this.composeMenu();
-                },
-              },
-            ]
-          : []),
-      ],
-      () => this.thread(),
-      this.composeFocus,
-      {
-        context: source
-          ? short(source.sender + " · " + source.text.replace(/\s+/g, " "), 42)
-          : undefined,
-        badge: this.draft ? "DRAFT" : undefined,
-        footer: this.voiceEnabled
-          ? "Swipe  Choose     Tap  Open     Hold  Dictate"
-          : undefined,
-      },
-    );
-  }
-  startInput(purpose: "chats" | "messages", back: Back = () => this.thread()) {
-    this.inputPurpose = purpose;
-    if (purpose === "messages" && !this.query)
-      this.searchOrigin = this.messages[this.messageIndex]?.id;
-    this.inputBack = back;
-    this.inputText = "";
-    this.uppercase = false;
-    this.keyboard();
-  }
-  keyboard() {
-    this.showMenu(
-      this.inputPurpose === "compose" ? "Keyboard" : "Search keyboard",
-      "keyboard",
-      [
-        ...(this.inputText.trim()
-          ? [
-              {
-                label:
-                  this.inputPurpose === "compose" ? "Done typing" : "Search",
-                detail: this.inputText.length + " characters",
-                run: () => this.finishInput(),
-              },
-            ]
-          : []),
-        ...[
-          "ABCDEF",
-          "GHIJKL",
-          "MNOPQR",
-          "STUVWX",
-          "YZ0123",
-          "456789",
-          ".,?!'-",
-        ].map((group) => ({
-          label: group.split("").join(" "),
-          detail: "Choose a letter group",
-          run: () => this.letters(group),
-        })),
-        {
-          label: this.uppercase ? "Lowercase letters" : "Uppercase letters",
-          detail: "Toggle letter case",
-          run: () => {
-            this.uppercase = !this.uppercase;
-            this.keyboard();
-          },
-        },
-        {
-          label: "Read current text",
-          detail: this.inputText.length + " characters",
-          run: () =>
-            this.read(
-              "Typed text",
-              this.inputText || "Empty",
-              "keyboard",
-              () => this.keyboard(),
-              () => this.keyboard(),
-            ),
-        },
-        { label: "Space", run: () => this.append(" ") },
-        {
-          label: "Backspace",
-          run: () => {
-            this.inputText = Array.from(this.inputText).slice(0, -1).join("");
-            this.keyboard();
-          },
-        },
-      ],
-      () => {
-        if (this.inputPurpose !== "compose") return this.inputBack();
-        this.setDraft(this.inputText);
-        this.composeFocus = 0;
-        this.composeMenu();
-      },
-      0,
-      {
-        badge: this.uppercase ? "ABC" : "abc",
-        context: this.inputText
-          ? "…" + Array.from(this.inputText).slice(-36).join("") + "▏"
-          : "Start typing",
-        footer: "Swipe  Choose    Tap  Select    Double tap  Back",
-      },
-    );
-  }
-  letters(group: string) {
-    this.showMenu(
-      "Choose a character",
-      "keyboard",
-      group.split("").map((letter) => ({
-        label: this.uppercase ? letter : letter.toLowerCase(),
-        detail: "Add to text",
-        run: () => this.append(this.uppercase ? letter : letter.toLowerCase()),
-      })),
-      () => this.keyboard(),
-      0,
-      {
-        native: true,
-        context: this.inputText ? short(this.inputText, 40) : "Start typing",
-        footer: "Swipe  Select    Tap  Add    Double tap  Groups",
-      },
-    );
-  }
-  append(s: string) {
-    const max = this.inputPurpose === "compose" ? 4096 : 120;
-    if (this.inputText.length + s.length > max)
-      throw new Error("Limit: " + max + " characters.");
-    this.inputText += s;
-    this.keyboard();
-  }
-  async finishInput() {
-    if (this.inputPurpose === "compose") {
-      this.setDraft(this.inputText);
-      this.composeFocus = 0;
-      this.composeMenu();
-    } else if (this.inputPurpose === "chats")
-      this.chatList(this.inputText.trim());
-    else await this.openChat(this.chat!, this.inputText.trim());
-  }
-  voiceText(text: string) {
-    if (this.inputPurpose === "compose") {
-      this.setDraft(text);
-      this.composeFocus = 0;
-      this.reviewDraft();
-    } else {
-      this.inputText = text;
-      this.read(
-        "Search transcript",
-        text,
-        "keyboard",
-        () => this.finishInput(),
-        () => this.keyboard(),
-        { action: "Search" },
-      );
+      )
+        .then((result) =>
+          Array.isArray(result.replies)
+            ? result.replies.filter(
+                (item: unknown): item is string =>
+                  typeof item === "string" && !!item.trim(),
+              )
+            : [],
+        )
+        .catch(() => []);
+      this.ideas.set(key, request);
+      if (this.ideas.size > 24)
+        this.ideas.delete(this.ideas.keys().next().value!);
+      void request.then((replies) => {
+        if (!replies.length && this.ideas.get(key) === request)
+          this.ideas.delete(key);
+      });
     }
+    return request;
+  }
+  async quickReply(source: Source) {
+    this.setComposeTarget(source);
+    const existing = this.draft ? [{ text: this.draft }] : [];
+    const fallback = replyChoices(source).map(([, text]) => ({ text }));
+    const quick = {
+      source,
+      choices: [
+        ...existing,
+        ...fallback.filter((choice) => choice.text !== this.draft),
+      ],
+      index: 0,
+    };
+    this.quick = quick;
+    const request =
+      this.replyIdeasEnabled && !source.outgoing && source.text.trim()
+        ? this.replyIdeas(source)
+        : undefined;
+    let initial: string[] = [];
+    if (request && !existing.length) {
+      // Stay on the source briefly. An API timeout must not delay the built-in replies.
+      initial = await Promise.race([
+        request,
+        new Promise<string[]>((resolve) => setTimeout(() => resolve([]), 750)),
+      ]);
+      if (initial.length)
+        quick.choices = [
+          ...initial.map((text) => ({ text, ai: true })),
+          ...fallback.filter((choice) => !initial.includes(choice.text)),
+        ];
+    }
+    this.drawQuickReply();
+    if (request && !initial.length)
+      void request.then((replies) => {
+        if (this.quick !== quick || !replies.length) return;
+        const oldText = quick.choices.map((choice) => choice.text);
+        quick.choices.push(
+          ...replies
+            .filter((text) => !oldText.includes(text))
+            .map((text) => ({ text, ai: true })),
+        );
+        // Keep the visible choice and confirmation stable; the next swipe reveals new ideas.
+      });
+  }
+  drawQuickReply() {
+    const quick = this.quick!;
+    const choice = quick.choices[quick.index];
+    const lines = wrap(choice.text);
+    this.mode = "quick";
+    this.menu = undefined;
+    this.emit({
+      title: "Reply · " + this.chat!.title,
+      icon: "send",
+      badge:
+        (choice.ai ? "AI " : "") +
+        (quick.index + 1) +
+        " / " +
+        quick.choices.length,
+      context: fitLine(
+        quick.source.sender +
+          ": " +
+          (quick.source.text || "[media]").replace(/\s+/g, " "),
+        525,
+      ),
+      body: lines.slice(0, 5).join("\n"),
+      footer:
+        "Swipe  Ideas    Tap  " +
+        (lines.length > 5 ? "Review" : "Send") +
+        (this.voiceEnabled ? "    Hold  Dictate" : "    Double  Back"),
+      shortcuts: [shortcut.messageActions],
+    });
+  }
+  private stageAction(action: PersonalAction, revision: string) {
+    this.pending = action;
+    this.pendingRevision = revision;
+    this.operationId = crypto.randomUUID();
+  }
+  private replyAction(text: string): PersonalAction {
+    return {
+      kind: this.reply ? "reply" : "send",
+      chatId: this.chat!.id,
+      messageId: this.reply?.id ?? 0,
+      text,
+    };
+  }
+  async confirmQuickReply() {
+    const quick = this.quick!;
+    this.setComposeTarget(quick.source);
+    const text = quick.choices[quick.index].text;
+    this.setDraft(text);
+    const action = this.replyAction(text);
+    if (wrap(text).length > 5) {
+      this.review(action, quick.source.revision, () => this.drawQuickReply());
+      return;
+    }
+    this.stageAction(action, quick.source.revision);
+    await this.send(() => this.drawQuickReply());
+  }
+  async voiceText(text: string) {
+    if (this.inputPurpose === "chats") {
+      this.chatList(text.trim().slice(0, 120));
+      return;
+    }
+    if (this.inputPurpose === "messages") {
+      await this.openChat(this.chat!, text.trim().slice(0, 120));
+      return;
+    }
+    this.setDraft(text);
+    const back =
+      this.mode === "quick" && this.quick?.source.id === this.reply?.id
+        ? () => this.quickReply(this.reply!)
+        : () => this.thread();
+    this.review(this.replyAction(text), this.reply?.revision ?? "", back);
   }
   review(
     action: PersonalAction,
     revision: string,
-    cancel: Back = () => this.cancelReview(),
+    cancel: Back = () => this.thread(),
   ) {
-    this.pending = action;
-    this.pendingRevision = revision;
-    this.operationId = crypto.randomUUID();
+    this.stageAction(action, revision);
     const destination =
       action.kind === "save" ? "Saved Messages" : this.chat!.title;
     const actionLabel =
@@ -1121,7 +1025,7 @@ export class GlassesApp {
         (action.kind === "react" ? reaction + "\n\n" : "") +
           (source?.text ?? ""),
       "send",
-      () => this.send(),
+      () => this.send(cancel),
       cancel,
       {
         badge: this.synthetic ? "DEMO" : "REVIEW",
@@ -1132,14 +1036,7 @@ export class GlassesApp {
       },
     );
   }
-  cancelReview() {
-    if (this.pending?.kind === "reply" || this.pending?.kind === "send") {
-      this.composeFocus = 0;
-      this.composeMenu();
-    } else if (this.reply) this.messageActions(this.reply);
-    else return this.thread();
-  }
-  async send() {
+  async send(cancel: Back = () => this.thread()) {
     const action = this.pending!;
     let result;
     try {
@@ -1159,9 +1056,7 @@ export class GlassesApp {
         return;
       }
       if (status === 400) {
-        this.notice("Action was declined", (error as Error).message, () =>
-          this.cancelReview(),
-        );
+        this.notice("Action was declined", (error as Error).message, cancel);
         return;
       }
       this.notice(
@@ -1179,27 +1074,37 @@ export class GlassesApp {
       );
       return;
     }
-    if (action.kind === "reply" || action.kind === "send") this.setDraft("");
-    this.notice(
-      this.synthetic ? "SYNTHETIC DEMO RECEIPT" : "TELEGRAM CONFIRMED",
-      (action.kind === "save"
-        ? "Saved to Saved Messages."
-        : action.kind === "react"
-          ? "Reaction applied."
-          : "Message sent as you.") +
-        (result.result?.messageId
-          ? "\nMessage #" + result.result.messageId
-          : "") +
-        (this.synthetic ? "\nNo real Telegram message was sent." : ""),
-      () =>
-        this.openChat(
-          this.chat!,
-          "",
-          action.kind === "reply" || action.kind === "send"
-            ? result.result?.messageId
-            : action.messageId,
-        ),
-    );
+    const outgoing = action.kind === "reply" || action.kind === "send";
+    if (outgoing) this.setDraft("");
+    const messageId = result.result?.messageId;
+    if (
+      outgoing &&
+      Number.isSafeInteger(messageId) &&
+      messageId > 0 &&
+      !this.query
+    ) {
+      // The write receipt gives us the exact text and server ID without another network trip.
+      const confirmed: Source = {
+        id: messageId,
+        chatId: action.chatId,
+        sender: "You",
+        outgoing: true,
+        text: action.text!,
+        date: Date.now(),
+        replyTo: action.kind === "reply" ? action.messageId : undefined,
+        revision: result.result.revision ?? "",
+      };
+      this.messages = this.messages
+        .filter((message) => message.id !== messageId)
+        .concat(confirmed);
+      this.messageIndex = this.messages.length - 1;
+    }
+    const status = outgoing
+      ? "Sent"
+      : action.kind === "save"
+        ? "Saved"
+        : "Reacted";
+    await this.thread((this.synthetic ? "Demo " : "") + status);
   }
   async catchup() {
     const d = await this.api("/brief");
@@ -1304,9 +1209,14 @@ export class GlassesApp {
           run: () =>
             this.notice(
               "GLASSES CONTROLS",
-              "Swipe to move. Tap to open.\nDouble tap to go back.\nHold to dictate where enabled.\nTap then hold for shortcuts.\nDouble tap at Telegram to exit.",
+              "Swipe to move. Tap to open.\nHold a message to dictate a reply.\nHold in Chats to find a chat.\nDouble tap to go back.\nTap then hold for shortcuts.",
               () => this.connection(),
             ),
+        },
+        {
+          label: "Catch-up chats",
+          detail: "Choose which chats appear in Catch-up.",
+          run: () => this.watchlist(),
         },
         {
           label: "Disconnect this display",
@@ -1332,7 +1242,6 @@ export class GlassesApp {
         const m = this.menu!;
         if (event === "back") await m.back();
         else if (event === "tap") {
-          if (m.icon === "compose") this.composeFocus = m.index;
           await m.rows[nativeIndex ?? m.index]?.run();
         } else {
           m.index = Math.max(
@@ -1340,6 +1249,18 @@ export class GlassesApp {
             Math.min(m.rows.length - 1, m.index + (event === "down" ? 1 : -1)),
           );
           this.drawMenu();
+        }
+      } else if (this.mode === "quick") {
+        const quick = this.quick!;
+        if (event === "back") {
+          if (!this.draft) this.setDraft(quick.choices[quick.index].text);
+          await this.thread();
+        } else if (event === "tap") await this.confirmQuickReply();
+        else {
+          quick.index =
+            (quick.index + (event === "up" ? -1 : 1) + quick.choices.length) %
+            quick.choices.length;
+          this.drawQuickReply();
         }
       } else if (this.mode === "thread") {
         if (event === "back") {
@@ -1355,7 +1276,7 @@ export class GlassesApp {
               this.messages[0]?.id,
             );
           else if (this.messageIndex >= this.messages.length)
-            this.conversationOptions();
+            await this.dictateNew();
           else await this.readMessage();
         } else {
           this.messageIndex = Math.max(
