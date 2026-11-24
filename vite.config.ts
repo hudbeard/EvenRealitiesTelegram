@@ -1,5 +1,9 @@
 import { defineConfig } from "vite";
 export default defineConfig({
+  build: {
+    target: "es2022",
+    rollupOptions: { input: { crew: "index.html", personal: "personal.html" } },
+  },
   base: "./",
   server: {
     host: "127.0.0.1",
@@ -7,5 +11,4 @@ export default defineConfig({
     strictPort: true,
     proxy: { "/api": "http://127.0.0.1:3001" },
   },
-  build: { target: "es2022" },
 });

@@ -1,0 +1,113 @@
+{
+  "source": "official Even Hub simulator framebuffer",
+  "synthetic": true,
+  "liveTelegram": false,
+  "durationSeconds": 112,
+  "scenes": [
+    [
+      null,
+      5,
+      "What changed while you were away?"
+    ],
+    [
+      "click",
+      9,
+      "The new plan stays linked to the original message."
+    ],
+    [
+      "click",
+      5,
+      "Reply as yourself, react, or keep the message."
+    ],
+    [
+      "click",
+      7,
+      "Review the exact recipient and reply before sending."
+    ],
+    [
+      "double_click",
+      5,
+      "Cancel without sending anything."
+    ],
+    [
+      "click",
+      4,
+      "Return to the reviewed reply."
+    ],
+    [
+      "click",
+      7,
+      "One confirmation, one synthetic personal-account receipt."
+    ],
+    [
+      "click",
+      5,
+      "Next: a conversation waiting on you."
+    ],
+    [
+      "click",
+      8,
+      "Read the direct reply and what you originally said."
+    ],
+    [
+      "click",
+      4,
+      "Choose an action on that source."
+    ],
+    [
+      "down",
+      4,
+      "A quick acknowledgement can be a reaction."
+    ],
+    [
+      "click",
+      5,
+      "The reaction also has an explicit review."
+    ],
+    [
+      "click",
+      6,
+      "Synthetic demo reaction confirmed."
+    ],
+    [
+      "click",
+      5,
+      "Your own commitments remain visible."
+    ],
+    [
+      "click",
+      7,
+      "Quote what you said; do not invent completion."
+    ],
+    [
+      "click",
+      3,
+      "Keep this source for later."
+    ],
+    [
+      "down",
+      2,
+      "Choose an action."
+    ],
+    [
+      "down",
+      4,
+      "Forward it to your own Saved Messages."
+    ],
+    [
+      "click",
+      6,
+      "Review the save destination."
+    ],
+    [
+      "click",
+      6,
+      "Synthetic Saved Messages receipt."
+    ],
+    [
+      "click",
+      5,
+      "Selected chats. Source context. Actions with your approval."
+    ]
+  ]
+}

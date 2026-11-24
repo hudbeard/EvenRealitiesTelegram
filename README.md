@@ -1,5 +1,11 @@
 # Fieldline
 
+**November 24 upgrade:** [Fieldline Catch-up with personal Telegram accounts](docs/personal-account.md) now adds selected-chat context, changed-plan cards, custom replies as you, reactions, Saved Messages, search, and read state. Run `npm run personal:demo` after building, then open `/personal.html` on port 3003. The source below documents the original crew-bot prototype; its published video remains a v0 demonstration. Live personal-account verification is still pending owner login.
+
+![Fieldline Catch-up source context](docs/media/personal-source.png)
+
+[Personal-account simulator walkthrough](docs/media/fieldline-personal-demo.mp4) · [Setup and verified capabilities](docs/personal-account.md)
+
 Telegram crew coordination for the Even Realities G2. One request, a short response, and an explicit confirmation on the glasses or R1 ring.
 
 **Status: application implemented; nine backend tests and the official simulator demo journey pass. Live Telegram delivery and the DoraHacks submission are not yet verified.**

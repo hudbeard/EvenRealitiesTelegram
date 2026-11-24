@@ -11,12 +11,19 @@
     "simulate": "node .tooling/node_modules/@evenrealities/evenhub-simulator/bin/index.js http://127.0.0.1:3001 --automation-port 9898",
     "pack": "node scripts/pack.mjs",
     "test:simulator": "node scripts/simulator-smoke.mjs",
-    "telegram:check": "node scripts/check-telegram.mjs"
+    "telegram:check": "node scripts/check-telegram.mjs",
+    "personal:demo": "tsx server/personal/index.ts --demo",
+    "personal:server": "tsx server/personal/index.ts",
+    "personal:login": "tsx scripts/personal-login.ts",
+    "personal:approve": "node scripts/personal-approve.mjs",
+    "personal:simulate": "node .tooling/node_modules/@evenrealities/evenhub-simulator/bin/index.js http://127.0.0.1:3003/personal.html --automation-port 9899",
+    "personal:test": "node scripts/personal-smoke.mjs"
   },
   "dependencies": {
     "@evenrealities/even_hub_sdk": "0.0.16",
     "dotenv": "18.0.10",
-    "express": "5.3.0"
+    "express": "5.3.0",
+    "teleproto": "1.234.0"
   },
   "devDependencies": {
     "@types/express": "5.0.6",

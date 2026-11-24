@@ -1,7 +1,9 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
+const personal = process.env.FIELDLINE_APP === "personal";
 const backend = new URL(
-  process.env.FIELDLINE_BACKEND_URL ?? "http://127.0.0.1:3001",
+  process.env.FIELDLINE_BACKEND_URL ??
+    (personal ? "http://127.0.0.1:3003" : "http://127.0.0.1:3001"),
 );
 if (
   !["http:", "https:"].includes(backend.protocol) ||
@@ -29,6 +31,10 @@ run(["node_modules/vite/bin/vite.js", "build"], {
   VITE_API_BASE: backend.origin,
 });
 const manifest = JSON.parse(await readFile("app.json", "utf8"));
+if (personal) {
+  manifest.entrypoint = "personal.html";
+  manifest.version = "0.2.0";
+}
 manifest.permissions = [
   {
     name: "network",
@@ -37,6 +43,11 @@ manifest.permissions = [
   },
 ];
 await mkdir("artifacts", { recursive: true });
+if (personal && process.env.FIELDLINE_VOICE === "true")
+  manifest.permissions.push({
+    name: "g2-microphone",
+    desc: "Capture a held-to-record reply and transcribe it for explicit review before sending.",
+  });
 await writeFile(
   "artifacts/app.packaged.json",
   JSON.stringify(manifest, null, 2),

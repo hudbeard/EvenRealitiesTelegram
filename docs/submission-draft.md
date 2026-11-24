@@ -1,5 +1,15 @@
 # Submission draft — not ready to submit
 
+## November 24 direction: Fieldline Catch-up
+
+Updated pitch: **What changed while I was away?** Fieldline connects selected personal Telegram conversations to a source-linked G2 catch-up. It highlights explicit plan changes, replies to your messages, unread questions, and commitments quoted from what you said. Open the original context, compose or dictate a reply, review it on G2, and confirm as yourself; reactions and Saved Messages follow the same review flow. Message edits invalidate a stale confirmation. No AI-generated decisions or automatic commitments are claimed.
+
+The personal-account adapter, companion UI, tap/ring flow, history/search, read acknowledgements, reactions, and Saved Messages are implemented. Hold-to-dictate has implementation and audio-format tests; live transcription still needs a configured service. Seventeen automated tests pass and the official simulator personal-demo journey is verified. Real account login and real Telegram receipts remain required before a fully connected submission claim.
+
+New synthetic simulator video: https://raw.githubusercontent.com/hudbeard/EvenRealitiesTelegram/main/docs/media/fieldline-personal-demo.mp4
+
+The original bot prototype and its draft below are retained as build history, not the final product positioning.
+
 Working name: Fieldline (availability not checked).
 Track: Messaging & News.
 

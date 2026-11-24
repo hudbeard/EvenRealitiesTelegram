@@ -1,0 +1,73 @@
+{
+  "passed": true,
+  "synthetic": true,
+  "liveTelegram": false,
+  "capabilities": [
+    "source-linked change detection",
+    "original context",
+    "personal reply preview",
+    "cancel without send",
+    "reply as user",
+    "reaction",
+    "Saved Messages",
+    "read state"
+  ],
+  "frames": [
+    {
+      "name": "02-catch-up",
+      "lit": 2901
+    },
+    {
+      "name": "03-new-plan-source",
+      "lit": 3343
+    },
+    {
+      "name": "04-original-plan-context",
+      "lit": 3343
+    },
+    {
+      "name": "05-actions",
+      "lit": 2713
+    },
+    {
+      "name": "06-reply-preview",
+      "lit": 2568
+    },
+    {
+      "name": "07-cancelled",
+      "lit": 2713
+    },
+    {
+      "name": "08-reply-preview",
+      "lit": 2568
+    },
+    {
+      "name": "09-reply-receipt",
+      "lit": 2467
+    },
+    {
+      "name": "10-next-card",
+      "lit": 2297
+    },
+    {
+      "name": "11-reaction-preview",
+      "lit": 2383
+    },
+    {
+      "name": "12-reaction-receipt",
+      "lit": 2136
+    },
+    {
+      "name": "13-save-preview",
+      "lit": 2764
+    },
+    {
+      "name": "14-save-receipt",
+      "lit": 2528
+    },
+    {
+      "name": "15-commitment",
+      "lit": 2786
+    }
+  ]
+}
