@@ -31,9 +31,9 @@ run(["node_modules/vite/bin/vite.js", "build"], {
   VITE_API_BASE: backend.origin,
 });
 const manifest = JSON.parse(await readFile("app.json", "utf8"));
-if (personal) {
-  manifest.entrypoint = "glasses.html";
-  manifest.version = "0.3.0";
+if (!personal) {
+  manifest.entrypoint = "index.html";
+  manifest.version = "0.1.0";
 }
 manifest.permissions = [
   {

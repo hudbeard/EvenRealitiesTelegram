@@ -49,6 +49,6 @@ Configure a Whisper-compatible multipart endpoint through STT_API_URL, STT_API_K
 
 ## Verified November 24
 
-22 tests, frontend build and compiled server build pass. The official simulator renders the monochrome icon plus header/body/footer containers. Fourteen actual glasses captures cover a complete synthetic journey: pairing, chats, thread, compose, review, receipt, keyboard-created new message, Saved Messages, watchlist, controls. The app stops microphone capture and active handling on foreground exit and resumes on foreground entry. Hardware behavior remains unverified.
+23 tests, frontend and compiled server builds pass. The official simulator verifies the inbox preview pane, message and reply layouts, system contextual shortcuts, native list focus, draft retention, exact send, keyboard entry, Saved Messages, reactions, search return, and plan-specific reply choices. The app stops microphone capture when leaving the foreground and resumes input on return. Closing a contextual menu leaves the conversation active. Hardware behavior remains unverified.
 
 The source is ready for owner login and a hosted HTTPS endpoint. No real Telegram receipt, live speech receipt or DoraHacks submission is claimed.

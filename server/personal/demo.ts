@@ -81,7 +81,13 @@ export class DemoPersonal implements PersonalProvider {
     ];
   }
   async dialogs() {
-    return this.chats.map((c) => ({ ...c }));
+    const previews = new Map<string, string>();
+    for (const message of this.messages)
+      previews.set(message.chatId, message.text.slice(0, 160));
+    return this.chats.map((chat) => ({
+      ...chat,
+      preview: previews.get(chat.id),
+    }));
   }
   async saved() {
     let chat = this.chats.find((c) => c.id === "demo:saved");

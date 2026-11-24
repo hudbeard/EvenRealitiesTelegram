@@ -12,11 +12,11 @@ Public source: https://github.com/hudbeard/EvenRealitiesTelegram
 
 Glasses-first video (112 seconds; actual official simulator captures with captions; synthetic data): https://raw.githubusercontent.com/hudbeard/EvenRealitiesTelegram/main/docs/media/fieldline-glasses-demo.mp4
 
-The primary entrypoint is glasses.html (version 0.3.0). The previous bot and personal companion videos are historical prototypes. New glasses-first simulator captures document browsing, composition/cancellation, confirmed reply, a custom ring-keyboard new message and Saved Messages without a phone textbox. All published demonstration data is synthetic.
+The primary entrypoint is glasses.html (version 0.4.0). The previous bot and personal companion videos are historical prototypes. New glasses-first simulator captures document browsing, composition/cancellation, confirmed reply, a custom ring-keyboard new message and Saved Messages without a phone textbox. All published demonstration data is synthetic.
 
 ## Verification and remaining work
 
-- Source implementation and 22 automated tests cover the standalone controller and personal API; frontend/server builds pass.
+- Source implementation and 23 automated tests cover the standalone controller and personal API; frontend/server builds pass.
 - Official simulator gestures and actual G2 framebuffers verify the glasses-only journey.
 - A deployable server image recipe, production server build and package entrypoint are provided.
 - Owner still needs to log into Telegram locally and verify a real message/reaction/save receipt.

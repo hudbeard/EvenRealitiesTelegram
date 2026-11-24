@@ -58,6 +58,7 @@ export class AccountTelegram implements PersonalProvider {
         title: d.title ?? d.name ?? "Chat",
         kind: d.isUser ? "dm" : d.isGroup ? "group" : "channel",
         unread: d.unreadCount,
+        preview: d.message?.message?.trim().slice(0, 160),
         readMaxId: d.dialog instanceof Api.Dialog ? d.dialog.readInboxMaxId : 0,
       }));
   }

@@ -4,6 +4,7 @@ export type Chat = {
   kind: "dm" | "group" | "channel";
   unread: number;
   readMaxId: number;
+  preview?: string;
 };
 export type Message = {
   id: number;

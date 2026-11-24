@@ -6,73 +6,73 @@
   "scenes": [
     [
       "01-home",
-      "Telegram starts on the glasses.",
-      "A personal-account client with a separate API server."
+      "Start with the unread inbox.",
+      "Use the ring or glasses touchpad to choose where to go."
     ],
     [
       "02-chats",
-      "Your conversations, browsed with G2 or R1.",
-      "Unread counts and account conversations; catch-up selection is optional."
+      "Preview a chat as you swipe.",
+      "The right pane shows the chat type, unread count, and latest message."
     ],
     [
       "03-thread",
-      "Read messages and reply context.",
-      "Swipe through the thread. Tap to read the full source."
+      "Read the message and its context.",
+      "A short message opens reply choices with one tap."
     ],
     [
       "04-compose",
-      "Compose without a phone textbox.",
-      "Quick replies, a ring-controlled keyboard, or configured dictation."
+      "Choose the intent and see the exact phrase.",
+      "Reply choices use the message context. You can also type or dictate."
     ],
     [
-      "07a-keyboard",
-      "A complete ring keyboard is available.",
-      "Choose a letter group, then a letter. Case, punctuation, space and backspace."
+      "08e-plan-reply",
+      "Confirm the new time in a changed plan.",
+      "A suggested question can reuse a time mentioned in the source."
     ],
     [
       "05-review",
-      "Review the destination and exact reply.",
-      "A separate confirmation sends. Double tap cancels and keeps the draft."
+      "Review the destination, source, and reply.",
+      "Tap to send. Double tap to return to the editable draft."
     ],
     [
       "06-receipt",
-      "One confirmed action, one receipt.",
-      "This demonstration uses synthetic data. No real messages are sent."
+      "See a receipt, then return to the sent reply.",
+      "Synthetic demo. The simulator sends no real Telegram messages."
+    ],
+    [
+      "06a-shortcuts",
+      "Open the system shortcut menu.",
+      "Tap then hold to jump to message actions, search, or the next unread chat."
+    ],
+    [
+      "07a-keyboard",
+      "Write with the ring keyboard.",
+      "Select a letter group, choose a character, then finish or keep typing."
     ],
     [
       "07-keyboard-message",
-      "Write a new message, not just a preset reply.",
-      "This single-letter test message was entered with glasses gestures."
+      "Review a typed message before sending.",
+      "This test typed the lowercase letter b using the native character picker."
     ],
     [
       "08-saved",
-      "Saved Messages is part of the glasses app.",
-      "Forward a source, then open your own Telegram notebook."
+      "Open your Saved Messages.",
+      "Send a copy of a message to your own Telegram notebook."
     ],
     [
-      "08a-reaction",
-      "A quick acknowledgement can be a reaction.",
-      "Thumbs up, heart or check; the same explicit review flow."
+      "08a-native-picker",
+      "Choose a reaction with native list focus.",
+      "The firmware handles list scrolling and selection."
     ],
     [
-      "08b-search-empty",
-      "Search the conversation from G2.",
-      "Honest empty results; refresh returns to the latest messages."
-    ],
-    [
-      "08c-catchup",
-      "Catch up on what changed.",
-      "Source-linked changes, replies, questions and your stated commitments."
-    ],
-    [
-      "09-watchlist",
-      "Manage catch-up chats on the glasses.",
-      "Ten selected conversations; the main chat browser remains independent."
+      "08c-search-empty",
+      "Search and return to your place.",
+      "Double tap from results to restore the message you were reading."
     ],
     [
       "10-controls",
-      "Phone for setup. Glasses for the interaction.",
-      "Even Hub hosts the bridge. Your backend owns the Telegram session."
+      "Gestures stay consistent across the app.",
+      "Use the Even phone app to host the bridge. Your server maintains the Telegram session."
     ]
   ]
 }

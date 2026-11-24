@@ -74,22 +74,23 @@ test("glasses composer never sends during selection/review/cancellation; only fi
   };
   try {
     await app.start();
-    await choose("Chats");
+    await choose("Unread");
     await choose("Maya");
     await app.input("tap");
-    await app.input("tap");
-    await choose("Reply");
-    await choose("Quick replies");
-    await choose("On my way.");
-    await choose("Review & send");
+    assert.match(app.frame.title, /Reply · Maya/);
+    await choose("Check first");
+    assert.equal(app.frame.body, "I’ll check and get back to you.");
     assert.equal(p.writes.length, 0);
-    await app.input("tap");
     await app.input("back");
-    assert.equal(app.draft, "On my way.");
-    assert.equal(p.writes.length, 0);
-    await choose("Review & send");
+    assert.equal(app.draft, "I’ll check and get back to you.");
+    await app.input("back");
+    await app.input("back");
+    assert.equal(app.frame.split?.heading, "Maya");
     await app.input("tap");
-    await choose("Send confirmed");
+    await app.input("tap");
+    assert.equal(p.writes.length, 0);
+    await choose("Review draft");
+    await app.input("tap");
     assert.equal(p.writes.length, 1);
     assert.equal(p.writes[0].kind, "reply");
     assert.equal(p.writes[0].messageId, 11);
@@ -99,17 +100,28 @@ test("glasses composer never sends during selection/review/cancellation; only fi
   }
 });
 test("long text wraps without dropping letters and review paginates before confirmation", async () => {
-  const text = "x".repeat(300),
+  const text = "W".repeat(300),
     lines = wrap(text);
   assert.equal(lines.join(""), text);
-  const app = new GlassesApp((async () => ({})) as Request, () => {});
+  let writes = 0;
+  const app = new GlassesApp(
+    async (path) => {
+      assert.equal(path, "/glasses/action");
+      writes++;
+      return { status: "sent" };
+    },
+    () => {},
+  );
   app.chat = { id: "x", title: "Test", kind: "dm", unread: 0, readMaxId: 0 };
   app.review({ kind: "send", chatId: "x", messageId: 0, text }, "");
-  assert.match(app.frame.title, /1\/2/);
+  assert.match(app.frame.badge ?? "", /^1 \/ /);
+  assert.match(app.frame.footer, /Next page/);
+  while (app.frame.footer.includes("Next page")) {
+    await app.input("tap");
+    assert.equal(writes, 0);
+  }
   await app.input("tap");
-  assert.equal(app.mode, "read");
-  await app.input("tap");
-  assert.match(app.frame.title, /CONFIRM/);
+  assert.equal(writes, 1);
 });
 
 test("back from the glasses keyboard retains typed text in the composer", async () => {
@@ -123,5 +135,38 @@ test("back from the glasses keyboard retains typed text in the composer", async 
   app.keyboard();
   await app.input("back");
   assert.equal(app.draft, "Typed with the ring.");
-  assert.match(app.frame.title, /WRITE/);
+  assert.match(app.frame.title, /New message/);
+});
+
+test("older pages join the current conversation without losing the newer messages", async () => {
+  const chat = {
+    id: "p",
+    title: "Plans",
+    kind: "group" as const,
+    unread: 0,
+    readMaxId: 29,
+  };
+  const source = (id: number) => ({
+    id,
+    chatId: chat.id,
+    sender: "Maya",
+    text: "Message " + id,
+    outgoing: false,
+    date: 0,
+    revision: "r",
+  });
+  const app = new GlassesApp(
+    async (path) =>
+      path.includes("before=30")
+        ? { chat, messages: [source(28), source(29)], hasOlder: false }
+        : { chat, messages: [source(30), source(31)], hasOlder: true },
+    () => {},
+  );
+  await app.openChat(chat);
+  await app.input("up");
+  assert.match(app.frame.body, /Load older/);
+  await app.input("tap");
+  assert.match(app.frame.body, /Message 29/);
+  await app.input("down");
+  assert.match(app.frame.body, /Message 30/);
 });

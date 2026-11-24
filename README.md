@@ -4,20 +4,20 @@ A glasses-first personal Telegram client for Even Realities G2 and the R1 ring. 
 
 ![Actual G2 home framebuffer](docs/media/glasses-home.png)
 
-[112-second glasses-first simulator walkthrough](docs/media/fieldline-glasses-demo.mp4) · [Server setup](docs/standalone.md)
+[112-second glasses-first simulator walkthrough](docs/media/fieldline-glasses-demo.mp4) · [Inbox preview](docs/media/glasses-inbox.png) · [Reply review](docs/media/glasses-review.png) · [Server setup](docs/standalone.md)
 
 **Status:** glasses-only synthetic simulator flows verified; personal Telegram adapter implemented. Real account delivery, live dictation, physical G2 testing, public server deployment, and DoraHacks submission remain unverified.
 
 ## What happens on the glasses
 
-- **Chats:** recent account conversations, unread counts, direct messages, groups and channel text; no catch-up selection required. Search conversations on G2.
+- **Inbox.** Open unread chats first, browse all chats with a message preview, or resume the last message you were reading. Search on G2 and return to the same position.
 - **Threads:** swipe messages, paginate full text, inspect the original replied-to message, search history and load older messages. Media is identified; view rich media in Telegram.
-- **Compose:** hold to dictate with configured speech service, use a grouped ring keyboard with case/punctuation/backspace, or choose a quick reply. Read your draft and review its destination before a separate confirmation.
+- **Replies.** Tap a short message to see reply choices based on its text, type with the ring keyboard, or hold to dictate when speech is configured. The review shows the recipient, source quote, and exact outgoing text. Double tap to keep an editable draft.
 - **Actions:** reply as yourself, write a new message, react with thumbs up/heart/check, or forward to Saved Messages. Cancellation preserves a draft. Missing receipts stay uncertain; writes are not automatically retried.
 - **Catch-up:** source-linked changes, unanswered questions, replies and your stated commitments. Read the evidence and open the underlying conversation. Manage its ten-chat selection entirely on G2.
 - **Saved Messages:** a real Telegram self-chat, readable and writable from the glasses.
 
-Swipe selects; tap opens; double tap returns; hold dictates in compose/search. Double tap at home exits. Microphone capture stops on app exit. Monochrome icons and three-item menus fit the 576×288 display. English is the current display target.
+Swipe to select, tap to open, and double tap to go back. Tap then hold for Even Hub shortcuts such as New message, Find in chat, and Next unread chat. Hold to dictate where enabled. Double tap at the Telegram home screen to open the system exit confirmation. The G2 display uses separate context and preview areas, brightness for focus, and native pickers for reactions and characters.
 
 ## Run the standalone app
 
@@ -73,7 +73,7 @@ npm run server:build
 npm run glasses:test
 ```
 
-22 automated tests cover source revision binding, single dispatch, ambiguous delivery, account-wide access boundaries, exact new-message text, Saved Messages, read state, speech formatting, review pagination and cancellation. The glasses smoke test drives official SDK gestures and captures actual 576×288 framebuffers. It covers pairing, chat browsing, reading, reply cancellation, confirmed reply, ring-keyboard new message, save, watchlist and controls. No real Telegram messages are sent by these tests.
+23 automated tests cover source revision binding, single dispatch, ambiguous delivery, account-wide access boundaries, exact new-message text, Saved Messages, read state, speech formatting, review pagination and cancellation. The glasses smoke test drives official SDK gestures and captures actual 576×288 framebuffers. It covers pairing, unread previews, native shortcuts and list focus, exact replies and cancellation, a plan-specific reply option, keyboard entry, Saved Messages, reactions, search return, and settings. No real Telegram messages are sent by these tests.
 
 [Glasses-first verification and setup](docs/standalone.md) · [Submission draft](docs/submission-draft.md) · [Earlier personal prototype](docs/personal-account.md) · [Original bot prototype](docs/crew-prototype.md)
 

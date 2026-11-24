@@ -180,3 +180,60 @@ a {
     font-size: 10px;
   }
 }
+
+[hidden] {
+  display: none !important;
+}
+#badge {
+  margin-left: auto;
+  color: #81ad75;
+  font-size: clamp(8px, 1.6vw, 12px);
+  white-space: nowrap;
+}
+.screen-content {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#context {
+  padding: 0.5em 0;
+  border-top: 1px solid #304430;
+}
+#split {
+  display: grid;
+  grid-template-columns: 41% 1fr;
+  align-items: stretch;
+  gap: 5%;
+  margin: 0.5em 0;
+  flex: 1;
+  min-height: 0;
+}
+#rows {
+  display: grid;
+  align-content: start;
+  gap: 0.6em;
+  color: #7aa86f;
+  font-size: clamp(9px, 2vw, 16px);
+}
+#rows > div {
+  padding: 0.25em 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#rows .focused {
+  color: #bdffa9;
+  font-weight: 700;
+}
+.screen-preview {
+  overflow: hidden;
+  border: 1px solid #51704c;
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: clamp(9px, 2vw, 16px);
+}
+.screen-preview pre {
+  font-size: inherit;
+  margin: 0.45em 0;
+  color: #a0c397;
+}
