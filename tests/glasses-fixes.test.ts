@@ -4,6 +4,16 @@ import { DemoPersonal } from "../server/personal/demo.js";
 import { GlassesApp, type Request } from "../src/glasses/controller.js";
 import { PairingCountdown } from "../src/glasses/pairing.js";
 import { requestTimeout, offlineMessage } from "../src/glasses/net.js";
+import {
+  DisplaySession,
+  SESSION_KEY,
+  endDisplaySession,
+  memoryStorage,
+  startPairing,
+  pairPromptBody,
+  pairPromptCount,
+  welcomeFrame,
+} from "../src/glasses/session.js";
 import { FakeTimers } from "./helpers/fake-timers.js";
 
 async function demoApp(watched: string[]) {
@@ -133,4 +143,70 @@ test("request timeouts: 3 s probes, longer for Telegram-backed reads and sends",
   assert.ok(requestTimeout("/glasses/action", "POST") >= 20_000);
   assert.match(offlineMessage("GET"), /Nothing was sent/);
   assert.doesNotMatch(offlineMessage("POST"), /Nothing was sent/);
+});
+
+test("401 / pair error copy has a single Tap-to-pair line", () => {
+  const expired = pairPromptBody("Display session expired. Tap to pair again.");
+  assert.equal(expired, "Display session expired. Tap to pair again.");
+  assert.equal((expired.match(/Tap to pair/gi) ?? []).length, 1);
+  assert.match(pairPromptBody("Can't reach your server."), /Tap to pair this display/);
+});
+
+test("welcome frame has a single pair instruction", () => {
+  const frame = welcomeFrame();
+  assert.equal(frame.title, "TELEGRAM / FIELDLINE");
+  assert.equal(pairPromptCount(frame), 1);
+  assert.match(frame.body, /Tap to connect this display/);
+  assert.doesNotMatch(frame.body, /Tap to pair this display/);
+});
+
+test("disconnect clears the stored token and lands on a Welcome that can start pairing", async () => {
+  const storage = memoryStorage({ [SESSION_KEY]: "revoked-token" });
+  const session = new DisplaySession(storage);
+  assert.equal(session.token, "revoked-token");
+  session.pairId = "old-pair";
+  session.pairCode = "123456";
+  let stopped = 0;
+  const { app, calls, counts } = await demoApp([]);
+  app.disconnected = () =>
+    endDisplaySession(session, () => {
+      stopped++;
+      session.pairId = "";
+      session.pairCode = "";
+    }, (frame) => app.emit(frame));
+  app.connection();
+  const row = app.menu!.rows.findIndex((r) => r.label === "Disconnect display");
+  for (let i = 0; i < row; i++) await app.input("down");
+  await app.input("tap");
+  assert.equal(app.frame.title, "DISCONNECT?");
+  await app.input("tap");
+  assert.equal(calls.filter((c) => c.path === "/logout").length, 1);
+  assert.equal(counts().disconnects, 0); // hook replaced the counter
+  assert.equal(session.token, "");
+  assert.equal(session.paired, false);
+  assert.equal(storage.getItem(SESSION_KEY), null);
+  assert.equal(session.pairId, "");
+  assert.equal(stopped, 1);
+  assert.equal(app.frame.title, "TELEGRAM / FIELDLINE");
+  assert.equal(pairPromptCount(app.frame), 1);
+  assert.notEqual(app.frame.title, "DISCONNECT?");
+  // Unpaired Tap uses startPairing (the same helper main.ts calls).
+  const pairCalls: string[] = [];
+  const p = await startPairing(session, async (path) => {
+    pairCalls.push(path);
+    return { id: "new-pair", code: "654321", expiresAt: Date.now() + 300000 };
+  });
+  assert.deepEqual(pairCalls, ["/pair"]);
+  assert.equal(p.id, "new-pair");
+  assert.equal(session.pairId, "new-pair");
+  assert.equal(session.token, "");
+  await assert.rejects(
+    startPairing(
+      new DisplaySession(memoryStorage({ [SESSION_KEY]: "still-here" })),
+      async () => {
+        throw new Error("must not start pairing while a token remains");
+      },
+    ),
+    /Already paired/,
+  );
 });

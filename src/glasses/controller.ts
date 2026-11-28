@@ -138,8 +138,8 @@ export class GlassesApp {
   cards: BriefCard[] = [];
   /** Clock for the Send-now guard; tests replace it. */
   now: () => number = () => Date.now();
-  /** Called after the display session is revoked. */
-  disconnected: () => void = () => location.reload();
+  /** Called after the display session is revoked. main.ts clears the token and shows Welcome. */
+  disconnected: () => void = () => {};
   /** A review's action cannot run before this time (1 s entry guard). */
   private actionGuardUntil = 0;
   constructor(

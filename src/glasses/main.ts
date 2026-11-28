@@ -9,19 +9,23 @@ import { GlassesDisplay } from "./display.js";
 import { GlassesMicrophone, type VoiceMode } from "./voice.js";
 import { PairingCountdown, formatRemaining } from "./pairing.js";
 import { requestTimeout, offlineMessage } from "./net.js";
+import {
+  DisplaySession,
+  welcomeFrame,
+  pairPromptBody,
+  startPairing,
+} from "./session.js";
 import "./style.css";
 const host = document.getElementById("app")!;
 host.innerHTML =
   '<main><header><span class="brand">FIELDLINE</span><span>Telegram for your glasses</span></header><section class="intro"><p class="eyebrow">YOUR CONVERSATIONS. HEADS UP.</p><h1>Telegram lives here.</h1><p>Browse, read, write and respond using your G2 or R1 controls. This screen mirrors the glasses. Your phone is only needed for setup and to host Even Hub.</p></section><section class="display" aria-label="Glasses display mirror"><div class="display-head"><img id="screen-icon" alt="" width="26" height="26"><h2 id="title"></h2><span id="badge"></span></div><div class="screen-content"><p id="context" hidden></p><pre id="body"></pre><div id="split" hidden><div id="rows"></div><div class="screen-preview"><strong id="preview-title"></strong><pre id="preview-detail"></pre></div></div></div><p id="footer"></p></section><p id="status" role="status">Connecting…</p><nav aria-label="Simulator controls"><button data-input="up" aria-label="Swipe up">↑<small>Previous</small></button><button data-input="tap">●<small>Tap / open</small></button><button data-input="down" aria-label="Swipe down">↓<small>Next</small></button><button data-input="back">↩<small>Double / back</small></button></nav><p class="hint">Swipe to select · Tap to open · Double tap to go back<br>Hold to dictate while composing or searching</p><details><summary>Account setup & server</summary><p>The backend holds your personal Telegram session. Run <code>npm run personal:login</code> on your server, then approve the pairing code shown in your glasses with <code>npm run personal:approve -- CODE</code>. Never paste Telegram login codes into this page.</p><p>Voice needs a configured speech-to-text endpoint. Quick replies are available without speech setup.</p><a href="personal.html">Open optional companion workspace</a></details></main>';
 const el = (id: string) => document.getElementById(id)!;
 const apiBase = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
-let token = localStorage.getItem("fieldline.glasses.session") ?? "",
-  bridge: EvenAppBridge | undefined,
+const session = new DisplaySession(localStorage);
+let bridge: EvenAppBridge | undefined,
   display: GlassesDisplay | undefined,
   running = true,
   queue = Promise.resolve(),
-  pairId = "",
-  pairCode = "",
   synthetic = false,
   pollTimer: ReturnType<typeof setTimeout> | undefined,
   countdown: PairingCountdown | undefined;
@@ -37,7 +41,7 @@ async function api(path: string, body?: unknown) {
     const r = await fetch(apiBase + "/api" + path, {
       method,
       headers: {
-        authorization: "Bearer " + token,
+        authorization: "Bearer " + session.token,
         ...(body === undefined ? {} : { "content-type": "application/json" }),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -45,8 +49,7 @@ async function api(path: string, body?: unknown) {
     });
     const data = await r.json();
     if (r.status === 401) {
-      token = "";
-      localStorage.removeItem("fieldline.glasses.session");
+      session.clear();
       throw Object.assign(
         new Error("Display session expired. Tap to pair again."),
         { status: 401 }
@@ -112,20 +115,29 @@ const app = new GlassesApp(
   () => startVoice("toggle"),
 );
 function stopPairing() {
-  pairId = "";
-  pairCode = "";
+  session.pairId = "";
+  session.pairCode = "";
   clearTimeout(pollTimer);
   pollTimer = undefined;
   countdown?.stop();
   countdown = undefined;
 }
+// Clear the token *before* leaving the conversation, and show Welcome in
+// place. Reloading with the revoked token still in localStorage was painting
+// a 401 error (sometimes a frozen DISCONNECT? frame) that ignored taps.
+app.disconnected = () => {
+  session.clear();
+  stopPairing();
+  render(welcomeFrame());
+  el("status").textContent = "Display disconnected. Tap to pair this display.";
+};
 function error(e: unknown) {
   el("status").textContent = (e as Error).message;
-  if (!token) {
+  if (!session.token) {
     stopPairing();
     render({
       title: "CONNECT TELEGRAM",
-      body: (e as Error).message + "\n\nTap to pair this display.",
+      body: pairPromptBody((e as Error).message),
       footer: "Tap: connect",
       icon: "glasses",
     });
@@ -163,14 +175,13 @@ function safe(f: () => Promise<unknown>) {
 }
 async function pollPair() {
   clearTimeout(pollTimer);
-  if (!pairId || !running) return;
-  const id = pairId;
+  if (!session.pairId || !running) return;
+  const id = session.pairId;
   try {
     const r = await api("/pair/" + id);
-    if (id !== pairId) return; // cancelled or replaced while waiting
+    if (id !== session.pairId) return; // cancelled or replaced while waiting
     if (r.token) {
-      token = r.token;
-      localStorage.setItem("fieldline.glasses.session", token);
+      session.remember(r.token);
       stopPairing();
       await app.start();
       el("status").textContent = synthetic
@@ -180,7 +191,7 @@ async function pollPair() {
     }
     pollTimer = setTimeout(() => safe(pollPair), 1500);
   } catch (e) {
-    if (id === pairId) stopPairing();
+    if (id === session.pairId) stopPairing();
     throw e;
   }
 }
@@ -191,28 +202,24 @@ async function input(event: Input, nativeIndex?: number) {
       await mic.stop();
     return;
   }
-  if (!token) {
-    if (event === "back" && pairId) {
+  if (!session.token) {
+    if (event === "back" && session.pairId) {
       stopPairing();
-      render({
-        title: "TELEGRAM / FIELDLINE",
-        body: "Your Telegram, on G2.\n\nChats · messages · replies\nReactions · Saved Messages\n\nTap to connect this display.",
-        footer: "Tap: connect · Phone: setup only",
-        icon: "telegram",
-      });
+      render(welcomeFrame());
       return;
     }
     if (event !== "tap") return;
-    if (!pairId) {
-      const p = await api("/pair", {});
+    if (!session.pairId) {
+      const p = await startPairing(session, api);
+      // stopPairing clears ids; restore the new request and start the countdown.
       stopPairing();
-      pairId = p.id;
-      pairCode = p.code;
+      session.pairId = p.id;
+      session.pairCode = p.code;
       const pairingFrame = (left: number): Frame => ({
         title: synthetic ? "CONNECT SYNTHETIC DEMO" : "PAIR THIS DISPLAY",
         body:
           "Pairing code: " +
-          pairCode +
+          session.pairCode +
           "\n\n" +
           (synthetic
             ? "Tap again to enter the demo."
@@ -240,7 +247,7 @@ async function input(event: Input, nativeIndex?: number) {
       ).start();
       safe(pollPair);
     } else if (synthetic) {
-      await api("/pair/approve", { code: pairCode });
+      await api("/pair/approve", { code: session.pairCode });
       await pollPair();
     }
     return;
@@ -279,7 +286,7 @@ const mic = new GlassesMicrophone({
     const response = await fetch(apiBase + "/api/transcribe", {
       method: "POST",
       headers: {
-        authorization: "Bearer " + token,
+        authorization: "Bearer " + session.token,
         "content-type": "application/octet-stream",
       },
       body: pcm,
@@ -298,7 +305,7 @@ const mic = new GlassesMicrophone({
 });
 
 async function startVoice(mode: VoiceMode = "hold") {
-  if (!token || !app.active || !bridge || !app.voiceEnabled || mic.busy) return;
+  if (!session.token || !app.active || !bridge || !app.voiceEnabled || mic.busy) return;
   if (mode === "hold") {
     if (app.busy || !app.canDictate()) return;
     app.prepareDictation();
@@ -316,14 +323,8 @@ window.addEventListener("pagehide", stop);
 safe(async () => {
   const health = await api("/health");
   synthetic = health.synthetic;
-  if (token) await app.start();
-  else
-    render({
-      title: "TELEGRAM / FIELDLINE",
-      body: "Your Telegram, on G2.\n\nChats · messages · replies\nReactions · Saved Messages\n\nTap to connect this display.",
-      footer: "Tap: connect · Phone: setup only",
-      icon: "telegram",
-    });
+  if (session.token) await app.start();
+  else render(welcomeFrame());
   el("status").textContent = synthetic
     ? "Synthetic demo server"
     : "Server ready";
@@ -358,7 +359,7 @@ void (async () => {
         if (!running) {
           running = true;
           app.active = true;
-          if (pairId) {
+          if (session.pairId) {
             countdown?.start();
             safe(pollPair);
           }
