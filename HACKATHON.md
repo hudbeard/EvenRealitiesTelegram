@@ -45,7 +45,7 @@ Fieldline is a **glasses-first personal Telegram client** for Even Realities G2 
 1. **Launch:** App opens directly at inbox with unread conversations first
 2. **Browse:** Swipe through chats, preview messages
 3. **Open:** Tap a conversation to see full thread
-4. **Reply:** Tap a message → see reply suggestions → Tap to review → Tap Send now
+4. **Reply:** Tap a message → review screen with a suggested reply (swipe for others) → Tap Send now
 5. **Voice:** Hold on a message → dictate → review text → tap to confirm
 6. **Catch-up:** Menu → Catch-up → see unanswered questions and changes
 7. **Saved:** Menu → Saved Messages → access personal notes
@@ -53,7 +53,7 @@ Fieldline is a **glasses-first personal Telegram client** for Even Realities G2 
 ## Verification
 
 ```bash
-# Run all 56 automated tests
+# Run all 82 automated tests
 npm test
 
 # Start demo mode (no Telegram account required)
@@ -112,7 +112,7 @@ fieldline/
 │   │   └── brief.ts       # Catch-up card generation
 │   └── store.ts           # SQLite state management
 ├── public/login.html      # Sign-in page
-├── tests/                 # 56 automated tests
+├── tests/                 # 82 automated tests
 ├── scripts/               # Smoke tests, demo recording
 ├── docs/                  # Build plan, verification, submission draft
 └── .tooling/              # Even Hub simulator + CLI (0.9.5, 0.2.0)
@@ -121,11 +121,12 @@ fieldline/
 ## Changes in This PR
 
 - Telegram sign-in at `/login`: QR (refreshed in place), phone code, 2FA; cancel and timeouts; session saved atomically and picked up by the running server. Unit-tested with a mocked Telegram; not verified against real Telegram or hardware.
-- Review before every send (no two-tap send), 1 s guard on Send now.
+- Review before every send: Tap a message opens review with a suggested reply, Tap Send now sends (two taps). 1 s guard on Send now, Double tap cancels, server requires `confirmed: true`.
 - Exit and Disconnect ask first (Tap confirms, Double tap goes back).
-- Pairing code countdown with Double tap to cancel.
+- Pairing code countdown with Double tap to cancel. The synthetic demo auto-pairs on boot and after a 401; live servers never do.
+- UX pass: auto-mark-read, swipe past the last message into the next unread chat, inbox rows with unread count, chat type and relative time, Catch-up labels and one-page cards, Settings row restore, mute mapping.
 - Friendlier offline errors with per-call timeouts.
-- Crew/bot prototype moved to `docs/archive/crew-prototype/`; its two test files are archived with it. The suite is 56 tests.
+- Crew/bot prototype moved to `docs/archive/crew-prototype/`; its two test files are archived with it. The suite is 82 tests.
 
 ## Running for Reviewers
 
@@ -140,7 +141,7 @@ npm run build
 npm run personal:demo        # Terminal 1
 npm run glasses:simulate     # Terminal 2
 # Open http://127.0.0.1:3003/glasses.html
-# Tap twice on simulator to pair
+# Demo auto-pairs and opens the inbox (falls back to: Tap twice to pair)
 ```
 
 **Real Telegram (Optional):**
@@ -168,4 +169,4 @@ npm run personal:approve -- CODE  # Approve pairing code shown on G2
 
 ---
 
-**Status:** builds clean and 56/56 tests pass at this commit; demo mode runs. Not verified: real Telegram sign-in/writes, G2 hardware.
+**Status:** builds clean and 82/82 tests pass at this commit; demo mode runs. Not verified: real Telegram sign-in/writes, G2 hardware.

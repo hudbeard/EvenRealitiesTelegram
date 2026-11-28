@@ -8,7 +8,7 @@ G2 / R1 gestures → Even App WebView → authenticated HTTPS API → personal T
 
 The server owns Telegram credentials, the saved account session, peer resolution, history/search, read acknowledgements and writes. The client stores only a revocable random bearer token. The phone provides Even Hub/Bluetooth hosting and initial account/pairing support. G2 has no independent network client in this SDK environment.
 
-The account browser currently lists the most recent 100 account dialogs. Histories load 40 messages per page, with older-page navigation and server-side text search. Catch-up is optional and restricted to ten selected chats; this restriction does not limit the main chat browser. Read state advances after continuing from the full source message. Reading a newer Telegram message advances the account's read watermark normally.
+The account browser currently lists the most recent 100 account dialogs. Histories load 40 messages per page, with older-page navigation and server-side text search. Catch-up is optional and restricted to ten selected chats; this restriction does not limit the main chat browser. Read state advances when a message is fully on screen in a thread (a long message when its last page is reached; search results are not marked), always forward-only and best-effort. Reading a newer Telegram message advances the account's read watermark normally.
 
 Direct channel posting is not offered. Channel text histories request sponsored content and display supported sponsored text before proceeding; rich sponsored media causes an explicit Telegram fallback. Regular media is labelled rather than played. Secret chats, calls, media upload/playback, contact discovery, forum topics, editing and deletion are not implemented.
 
@@ -29,7 +29,7 @@ docker run --rm -p 127.0.0.1:3003:3003 --env-file .env \
 
 Put HTTPS in front of the container and persist /app/.data across restarts. PERSONAL_ORIGIN is the exact browser/WebView origin accepted by CORS. For a packaged WebView with an opaque/variable origin, PERSONAL_ORIGIN=* permits bearer-authenticated requests without cookies. Do not expose simulator automation port 9899. This container configuration has been supplied, but no Docker engine or public host deployment has been verified in this workspace.
 
-On G2, generate a pairing code and approve it on the server with npm run personal:approve -- CODE. The production image includes the approval helper; use docker exec CONTAINER npm run personal:approve -- CODE so it reads the same .data/personal-approval.key. Pairing codes expire after five minutes; bearer sessions expire after four hours. A rejected session requires pairing again. Disconnect revokes only that display session, not the underlying Telegram account session.
+On G2, generate a pairing code and approve it on the server with npm run personal:approve -- CODE. The production image includes the approval helper; use docker exec CONTAINER npm run personal:approve -- CODE so it reads the same .data/personal-approval.key. The synthetic demo server (`/api/health` with `synthetic: true`, mode `personal-demo`) is paired automatically by the glasses page; live servers never are, and live approval still needs the local key. Pairing codes expire after five minutes; bearer sessions expire after four hours. A rejected session requires pairing again. Disconnect revokes only that display session, not the underlying Telegram account session.
 
 ## Authenticated glasses API
 
@@ -49,6 +49,6 @@ Configure a Whisper-compatible multipart endpoint through STT_API_URL, STT_API_K
 
 ## Verified November 24
 
-28 tests and both builds passed at that time (the current branch has 56 tests). The official simulator verifies direct inbox entry, blank gesture capture, two-tap reply confirmation, cancellation, inline receipts, local-model suggestions, Saved Messages, and reactions. Microphone and transcription logic are tested with synthetic PCM. The app stops microphone capture when leaving the foreground and resumes input on return. Closing a contextual menu leaves the conversation active. Hardware behavior remains unverified.
+28 tests and both builds passed at that time (the current branch has 82 tests). The official simulator verifies direct inbox entry, blank gesture capture, two-tap reply confirmation, cancellation, inline receipts, local-model suggestions, Saved Messages, and reactions. Microphone and transcription logic are tested with synthetic PCM. The app stops microphone capture when leaving the foreground and resumes input on return. Closing a contextual menu leaves the conversation active. Hardware behavior remains unverified.
 
 The source is ready for owner login and a hosted HTTPS endpoint. No real Telegram receipt, live speech receipt or DoraHacks submission is claimed.
