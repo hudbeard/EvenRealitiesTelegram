@@ -11,6 +11,7 @@ COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/dist-server ./dist-server
+COPY --from=build /app/public ./public
 COPY scripts/personal-approve.mjs ./scripts/personal-approve.mjs
 RUN mkdir .data && chown -R node:node /app
 USER node
