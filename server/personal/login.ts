@@ -224,7 +224,11 @@ export class LoginAttempt {
     this.client = client;
     try {
       await client.connect();
-      this.ensureOpen();
+      if (this.terminal) {
+        // Cancelled or timed out while connecting: close the late connection.
+        await client.disconnect().catch(() => {});
+        return;
+      }
       if (this.kind === "qr") {
         this.unsubscribe = client.onLoginTokenUpdate(() => {
           if (this.state === "qr") void this.exportToken();
