@@ -39,9 +39,42 @@ type Menu = {
   footer?: string;
 };
 export { wrap } from "./text.js";
-import { fitLine, wrap } from "./text.js";
+import { clampLines, fitLine, fitWithSuffix, relativeTime, wrap } from "./text.js";
+import { getTextWidth } from "@evenrealities/pretext";
 const short = (s: string, n = 42) =>
   s.length > n ? s.slice(0, n - 1) + "…" : s;
+/** Inbox row label: `● Build night · 2` within the 188 px label column. */
+export function inboxLabel(chat: Chat) {
+  if (!chat.unread) return fitLine(chat.title, 188);
+  const count = chat.unread > 99 ? "99+" : String(chat.unread);
+  return fitWithSuffix("● ", chat.title, " · " + count, 188);
+}
+/**
+ * Live inbox badge: total unread messages. `3 UNREAD` fits the 95 px badge;
+ * two digits do not, so larger totals read `12 NEW` / `99+ NEW`.
+ */
+export function unreadBadge(chats: Chat[]) {
+  const total = chats.reduce((sum, chat) => sum + chat.unread, 0);
+  if (!total) return undefined;
+  const count = total > 99 ? "99+" : String(total);
+  const long = count + " UNREAD";
+  return getTextWidth(long) <= 95 ? long : count + " NEW";
+}
+/** Preview heading: `Group · 2 unread · 5m` within 286 px. */
+export function inboxHeading(chat: Chat, now: number) {
+  const kind =
+    chat.kind === "dm" ? "DM" : chat.kind === "group" ? "Group" : "Channel";
+  const when = chat.lastDate ? relativeTime(chat.lastDate, now) : "";
+  const state = chat.unread ? chat.unread + " unread" : "up to date";
+  const muted = chat.muted ? "Muted" : "";
+  // Drop the least useful part first: "up to date", then the time.
+  const tries = [
+    [kind, state, when, muted],
+    [kind, chat.unread ? state : "", when, muted],
+    [kind, chat.unread ? state : "", muted],
+  ].map((parts) => parts.filter(Boolean).join(" · "));
+  return fitLine(tries.find((h) => getTextWidth(h) <= 286) ?? tries[2], 286);
+}
 function replyChoices(source: Source) {
   const time = source.text.match(/\b\d{1,2}:\d{2}(?:\s?[ap]\.?m\.?)?\b/i)?.[0];
   if (/\b(instead|moved to|new plan|rescheduled|update:)\b/i.test(source.text))
@@ -131,6 +164,8 @@ export class GlassesApp {
   private searchOrigin?: number;
   private chatSearchOrigin?: string;
   private readThrough = new Map<string, number>();
+  /** Read acknowledgements run one at a time, in the order messages were seen. */
+  private ackChain: Promise<void> = Promise.resolve();
   inputPurpose: "compose" | "chats" | "messages" = "compose";
   pending?: PersonalAction;
   operationId = "";
@@ -269,18 +304,10 @@ export class GlassesApp {
       "chats",
       [
         ...matches.map((chat) => ({
-          label: (chat.unread ? "● " : "") + chat.title,
-          preview: chat.title,
+          label: inboxLabel(chat),
+          preview: inboxHeading(chat, this.now()),
           chatId: chat.id,
-          detail:
-            (chat.kind === "dm"
-              ? "Direct message"
-              : chat.kind === "group"
-                ? "Group"
-                : "Channel") +
-            " · " +
-            (chat.unread ? chat.unread + " unread" : "Up to date") +
-            (chat.preview ? "\n\n" + chat.preview.replace(/\s+/g, " ") : ""),
+          detail: chat.preview ? chat.preview.replace(/\s+/g, " ") : "",
           run: () =>
             this.openChat(chat, "", undefined, undefined, () =>
               backToList(chat.id),
@@ -341,7 +368,11 @@ export class GlassesApp {
         matches.findIndex((chat) => chat.id === focusId),
       ),
       {
-        badge: this.synthetic ? "DEMO" : undefined,
+        badge: this.synthetic
+          ? "DEMO"
+          : !filter && !unreadOnly
+            ? unreadBadge(this.chats)
+            : undefined,
         context: filter
           ? "“" + short(filter, 30) + "” · " + matches.length + " found"
           : undefined,
@@ -465,10 +496,7 @@ export class GlassesApp {
       });
       return;
     }
-    const date = new Date(m.date).toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    const date = relativeTime(m.date, this.now());
     const lines = this.messageLines(m);
     const original = this.messages.find((parent) => parent.id === m.replyTo);
     const action =
@@ -501,6 +529,52 @@ export class GlassesApp {
           : "   Tap+hold  Menu"),
       shortcuts: this.threadShortcuts(m, lines.length <= 5),
     });
+    // Seen = fully painted on the normal 5-line path. Search results and
+    // long messages (which need Read) are not marked read by a swipe.
+    if (lines.length <= 5 && !this.query) void this.queueAck(m);
+  }
+  /**
+   * The next chat with unread messages after the current one (inbox order,
+   * wrapping), refreshed from the server once pending read acks land.
+   */
+  async nextUnreadChat() {
+    await this.settled();
+    await this.refresh();
+    const here = this.chats.findIndex((chat) => chat.id === this.chat?.id);
+    const ordered =
+      here < 0
+        ? this.chats
+        : [...this.chats.slice(here + 1), ...this.chats.slice(0, here)];
+    return ordered.find((chat) => chat.unread > 0 && chat.id !== this.chat?.id);
+  }
+  /** Swipe down past the last message: next unread chat, or “caught up”. */
+  async continueToNextUnread() {
+    const next = await this.nextUnreadChat();
+    if (next) {
+      await this.openChat(next, "", undefined, undefined, () =>
+        this.chatList("", false, next.id),
+      );
+      return;
+    }
+    const here = this.chat?.id;
+    this.read(
+      "You’re caught up",
+      "No other unread chats.",
+      "check",
+      () => this.chatList("", false, here),
+      () => this.thread(),
+      { action: "Inbox" },
+    );
+  }
+  /** Queue a best-effort read acknowledgement after any earlier ones. */
+  queueAck(message: Source) {
+    const run = this.ackChain.then(() => this.acknowledge(message));
+    this.ackChain = run;
+    return run;
+  }
+  /** Resolves once every queued read acknowledgement has finished. */
+  settled() {
+    return this.ackChain;
   }
   messageLines(message: Source) {
     return wrap(
@@ -540,7 +614,7 @@ export class GlassesApp {
       const source = this.messages[this.messageIndex];
       this.setComposeTarget(source);
       if (source && this.messageLines(source).length <= 5)
-        void this.acknowledge(source);
+        void this.queueAck(source);
     } else if (this.mode === "quick") {
       this.setComposeTarget(this.quick!.source);
     } else {
@@ -596,10 +670,7 @@ export class GlassesApp {
           break;
         }
         case 7: {
-          await this.refresh();
-          const next = this.chats.find(
-            (chat) => chat.unread > 0 && chat.id !== this.chat?.id,
-          );
+          const next = await this.nextUnreadChat();
           if (next)
             await this.openChat(next, "", undefined, undefined, () =>
               this.chatList("", true, next.id),
@@ -690,35 +761,41 @@ export class GlassesApp {
     });
   }
   async acknowledge(message: Source) {
-    const chat = this.chat!;
-    if (
-      message.outgoing ||
-      message.id <= Math.max(chat.readMaxId, this.readThrough.get(chat.id) ?? 0)
-    )
-      return;
+    const id = message.chatId;
+    const chat =
+      this.chat?.id === id ? this.chat : this.chats.find((c) => c.id === id);
+    const through = Math.max(chat?.readMaxId ?? 0, this.readThrough.get(id) ?? 0);
+    if (message.outgoing || message.id <= through) return;
     try {
-      await this.api(
-        "/glasses/chats/" + encodeURIComponent(message.chatId) + "/read",
-        { messageId: message.id },
-      );
-      const row = this.chats.find((item) => item.id === chat.id);
+      await this.api("/glasses/chats/" + encodeURIComponent(id) + "/read", {
+        messageId: message.id,
+      });
+      const row = this.chats.find((item) => item.id === id);
       if (row) {
         const previous = Math.max(
           row.readMaxId,
-          chat.readMaxId,
-          this.readThrough.get(chat.id) ?? 0,
+          through,
+          this.readThrough.get(id) ?? 0,
         );
-        row.unread = Math.max(
-          0,
-          row.unread -
-            this.messages.filter(
-              (item) =>
-                !item.outgoing && item.id > previous && item.id <= message.id,
-            ).length,
-        );
-        row.readMaxId = message.id;
+        if (message.id > previous) {
+          row.unread = Math.max(
+            0,
+            row.unread -
+              this.messages.filter(
+                (item) =>
+                  item.chatId === id &&
+                  !item.outgoing &&
+                  item.id > previous &&
+                  item.id <= message.id,
+              ).length,
+          );
+          row.readMaxId = message.id;
+        }
       }
-      this.readThrough.set(chat.id, message.id);
+      this.readThrough.set(
+        id,
+        Math.max(this.readThrough.get(id) ?? 0, message.id),
+      );
     } catch {
       // Read acknowledgements are best-effort; the user can still act on the source.
     }
@@ -734,7 +811,7 @@ export class GlassesApp {
         throw new Error("Refresh this chat and try again.");
     }
     this.messageActions(message, back);
-    await this.acknowledge(message);
+    await this.queueAck(message);
   }
   async readMessage(message = this.messages[this.messageIndex]) {
     if (!message) return;
@@ -743,7 +820,7 @@ export class GlassesApp {
       if (channel) this.messageActions(message);
       else if (!message.revision) await this.openMessageActions(message);
       else await this.quickReply(message);
-      void this.acknowledge(message);
+      void this.queueAck(message);
     };
     if (this.messageLines(message).length <= 5) return next();
     this.read(
@@ -946,7 +1023,7 @@ export class GlassesApp {
           ...fallback.filter((choice) => !initial.includes(choice.text)),
         ];
     }
-    this.drawQuickReply();
+    this.drawQuickReply(true);
     if (request && !initial.length)
       void request.then((replies) => {
         if (this.quick !== quick || !replies.length) return;
@@ -959,14 +1036,23 @@ export class GlassesApp {
         // Keep the visible choice and confirmation stable; the next swipe reveals new ideas.
       });
   }
-  drawQuickReply() {
+  /**
+   * Review screen with ideas (S3): one screen, one deliberate confirm.
+   * Swipe cycles ideas; Tap sends the exact text shown, but never within 1 s
+   * of arriving here; Double tap goes back without sending. `arm` is false
+   * only for swipes, so changing the idea never re-arms or skips the guard.
+   */
+  drawQuickReply(arm = true) {
     const quick = this.quick!;
     const choice = quick.choices[quick.index];
     const lines = wrap(choice.text);
     this.mode = "quick";
     this.menu = undefined;
+    this.reply = quick.source;
+    this.stageAction(this.replyAction(choice.text), quick.source.revision);
+    if (arm) this.actionGuardUntil = this.now() + 1000;
     this.emit({
-      title: "Reply · " + this.chat!.title,
+      title: "Send · " + this.chat!.title,
       icon: "send",
       badge:
         (choice.ai ? "AI " : "") +
@@ -974,15 +1060,19 @@ export class GlassesApp {
         " / " +
         quick.choices.length,
       context: fitLine(
-        quick.source.sender +
+        "Re " +
+          quick.source.sender +
           ": " +
           (quick.source.text || "[media]").replace(/\s+/g, " "),
-        525,
+        540,
       ),
       body: lines.slice(0, 5).join("\n"),
       footer:
-        "Swipe  Ideas    Tap  Review" +
-        (this.voiceEnabled ? "    Hold  Dictate" : "    Double tap  Back"),
+        lines.length > 5
+          ? "Swipe  Ideas     Tap  Review     Double tap  Back"
+          : this.voiceEnabled
+            ? "Swipe  Ideas    Tap  Send now    Hold  Dictate"
+            : "Swipe  Ideas     Tap  Send now     Double tap  Back",
       shortcuts: [shortcut.messageActions],
     });
   }
@@ -1001,12 +1091,22 @@ export class GlassesApp {
   }
   async confirmQuickReply() {
     const quick = this.quick!;
-    this.setComposeTarget(quick.source);
     const text = quick.choices[quick.index].text;
+    this.setComposeTarget(quick.source);
     this.setDraft(text);
     const action = this.replyAction(text);
-    // Always go through review - no instant sends (Designer fix #2)
-    this.review(action, quick.source.revision, () => this.drawQuickReply());
+    if (wrap(text).length > 5) {
+      // Too long to show whole here: page through it first, with its own guard.
+      this.review(action, quick.source.revision, () => this.drawQuickReply());
+      return;
+    }
+    if (
+      this.pending?.text !== text ||
+      this.pending.messageId !== action.messageId ||
+      this.pending.kind !== action.kind
+    )
+      this.stageAction(action, quick.source.revision);
+    await this.send(() => this.drawQuickReply());
   }
   async voiceText(text: string) {
     if (this.inputPurpose === "chats") {
@@ -1143,34 +1243,34 @@ export class GlassesApp {
       "spark",
       [
         ...this.cards.map((c) => ({
-          label: c.title,
-          detail: c.evidence[0].chatTitle + " · " + c.kind,
+          // Specific label: `Build night · change` (title kept within 188 px).
+          // ("commitment" is shortened to "to-do" so typical titles fit whole.)
+          label: fitWithSuffix(
+            "",
+            c.evidence[0].chatTitle,
+            " · " + (c.kind === "commitment" ? "to-do" : c.kind),
+            188,
+          ),
+          detail: c.title,
           run: async () => {
             const e = c.evidence[0],
               chat = this.chats.find((c) => c.id === e.chatId);
+            // One page: why + the first quote (sender in the context rail),
+            // so Tap goes straight to the source message.
             if (chat)
               this.read(
                 c.title,
-                c.why +
-                  "\n\n" +
-                  c.evidence
-                    .map(
-                      (e) =>
-                        e.chatTitle +
-                        " / " +
-                        e.sender +
-                        " #" +
-                        e.messageId +
-                        "\n" +
-                        e.quote,
-                    )
-                    .join("\n\n"),
+                clampLines(c.why + "\n\n“" + e.quote + "”", 5),
                 "spark",
                 () =>
                   this.openChat(chat, "", e.messageId, undefined, () =>
                     this.catchup(),
                   ),
                 () => this.catchup(),
+                {
+                  context: fitLine(e.chatTitle + " · " + e.sender, 540),
+                  action: "Open message",
+                },
               );
           },
         })),
@@ -1210,10 +1310,14 @@ export class GlassesApp {
       })),
       back ?? (() => this.home()), // Designer fix #7
       index,
-      { badge: this.watched.length + " / 10" },
+      {
+        badge: this.watched.length + " / 10",
+        footer: "Swipe  Select     Tap  Toggle     Double tap  Back",
+      },
     );
   }
-  connection() {
+  /** Settings; sub-screens return to the row they came from (`index`). */
+  connection(index = 0) {
     this.showMenu(
       "Settings",
       "glasses",
@@ -1229,7 +1333,7 @@ export class GlassesApp {
               this.synthetic
                 ? "Synthetic data. No Telegram account connected."
                 : "Personal Telegram account session is stored on your server.\nThe phone hosts Even Hub and handles setup.",
-              () => this.connection(),
+              () => this.connection(0),
             ),
         },
         {
@@ -1239,13 +1343,13 @@ export class GlassesApp {
             this.notice(
               "GLASSES CONTROLS",
               "Swipe to move. Tap to open.\nHold a message to dictate a reply.\nHold in Chats to find a chat.\nDouble tap to go back.\nTap then hold for shortcuts.",
-              () => this.connection(),
+              () => this.connection(1),
             ),
         },
         {
           label: "Catch-up chats",
           detail: "Choose which chats appear in Catch-up.",
-          run: () => this.watchlist(0, () => this.connection()),
+          run: () => this.watchlist(0, () => this.connection(2)),
         },
         {
           label: "Disconnect display", // Designer fix #8
@@ -1260,11 +1364,12 @@ export class GlassesApp {
                 await this.api("/logout", {});
                 this.disconnected();
               },
-              () => this.connection(),
+              () => this.connection(3),
             ),
         },
       ],
       () => this.home(),
+      index,
     );
   }
   /** Informational screen: Tap and Double tap both continue. */
@@ -1303,12 +1408,15 @@ export class GlassesApp {
         if (event === "back") {
           if (!this.draft) this.setDraft(quick.choices[quick.index].text);
           await this.thread();
-        } else if (event === "tap") await this.confirmQuickReply();
-        else {
+        } else if (event === "tap") {
+          // The tap that opened this screen must not also send.
+          if (this.now() < this.actionGuardUntil) return;
+          await this.confirmQuickReply();
+        } else {
           quick.index =
             (quick.index + (event === "up" ? -1 : 1) + quick.choices.length) %
             quick.choices.length;
-          this.drawQuickReply();
+          this.drawQuickReply(false);
         }
       } else if (this.mode === "thread") {
         if (event === "back") {
@@ -1326,6 +1434,13 @@ export class GlassesApp {
           else if (this.messageIndex >= this.messages.length)
             await this.dictateNew();
           else await this.readMessage();
+        } else if (
+          event === "down" &&
+          !this.query &&
+          this.messages.length > 0 &&
+          this.messageIndex >= this.messages.length - 1
+        ) {
+          await this.continueToNextUnread();
         } else {
           this.messageIndex = Math.max(
             this.hasOlder ? -1 : 0,

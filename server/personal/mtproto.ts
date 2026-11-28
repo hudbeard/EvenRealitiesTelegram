@@ -79,9 +79,14 @@ export class AccountTelegram implements PersonalProvider {
         kind: d.isUser ? "dm" : d.isGroup ? "group" : "channel",
         unread: d.unreadCount,
         preview: d.message?.message?.trim().slice(0, 160),
+        // Telegram dates are seconds; the lens works in epoch ms.
+        lastDate: d.message?.date ? d.message.date * 1000 : undefined,
         readMaxId: d.dialog instanceof Api.Dialog ? d.dialog.readInboxMaxId : 0,
+        muted: mutedNow(d.dialog, this.now()),
       }));
   }
+  /** Clock for mute checks (tests pin it). */
+  now = () => Date.now();
   async saved(): Promise<Chat> {
     const me = await this.client.getMe();
     const id = me.id.toString();
@@ -193,4 +198,17 @@ export class AccountTelegram implements PersonalProvider {
   async close() {
     await this.client.disconnect();
   }
+}
+
+/**
+ * Per-chat mute from the dialog's notify settings: muted while
+ * `muteUntil` (Telegram seconds) is in the future. Account-wide default
+ * notify settings are not resolved, so a chat muted only by a global
+ * default reads as not muted.
+ */
+export function mutedNow(dialog: unknown, now: number) {
+  if (!(dialog instanceof Api.Dialog)) return false;
+  const settings = dialog.notifySettings;
+  if (!(settings instanceof Api.PeerNotifySettings)) return false;
+  return (settings.muteUntil ?? 0) * 1000 > now;
 }

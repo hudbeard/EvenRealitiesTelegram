@@ -81,6 +81,10 @@ async function confirmReviewed() {
   await delay(1100);
   return tap();
 }
+/** The focused inbox row label, e.g. "● Maya · 1". */
+function focusedRow(current) {
+  return current.split.rows[current.split.index];
+}
 async function choose(label) {
   for (let i = 0; i < 130; i++) {
     const current = await frame();
@@ -88,7 +92,7 @@ async function choose(label) {
       current.split,
       "Expected a split menu at " + current.title + " when choosing " + label,
     );
-    if (current.split.rows[current.split.index]?.replace(/^● /, "") === label) {
+    if (current.split.rows[current.split.index]?.replace(/^● /, "").replace(/ · \d+\+?$/, "") === label) {
       await tap();
       return;
     }
@@ -134,8 +138,14 @@ function isExpiredBootDialogs401(entry) {
     entry.message === "[fetch] 401 Unauthorized /api/glasses/dialogs"
   );
 }
-// Welcome, or a "Display session expired. Tap to pair again." boot.
-const opening = await frame();
+// The synthetic demo auto-pairs on boot (and after a stale-token 401), so
+// the opening should become Chats on its own. Older builds showed Welcome
+// or "Display session expired. Tap to pair again."; the taps below cover that.
+let opening = await frame();
+for (let i = 0; i < 15 && opening.title !== "Chats"; i++) {
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  opening = await frame();
+}
 // Snapshot after the first frame (the boot 401 is already logged) and
 // before pairing taps, so only that expected line is allowed later.
 const boot401s = (await request(sim + "/api/console")).entries.filter(
@@ -151,13 +161,13 @@ assert.equal(
   "Start a fresh simulator at Chats.",
 );
 assert.equal((await frame()).badge, "DEMO");
-assert.equal((await frame()).split.heading, "Maya");
+assert.match(focusedRow(await frame()), /^● Maya · 1$|^Maya$/);
 await shot("01-inbox");
 await gesture("down");
-assert.equal((await frame()).split.heading, "Build night");
+assert.match(focusedRow(await frame()), /Build night/);
 await shot("02-inbox-scrolled");
 await gesture("up");
-assert.equal((await frame()).split.heading, "Maya");
+assert.match(focusedRow(await frame()), /^● Maya · 1$|^Maya$/);
 const scrolls = (await request(sim + "/api/console")).entries.filter(
   (entry) =>
     entry.message.includes("EvenHub event:") &&
@@ -179,9 +189,10 @@ await shot("03-thread");
 const original = await history("demo:maya");
 
 await tap();
-assert.equal((await frame()).title, "Reply · Maya");
+// Reply lands on review with ideas: Swipe  Ideas, Tap  Send now (after 1 s).
+assert.equal((await frame()).title, "Send · Maya");
 assert.match((await frame()).context, /prototype too/);
-assert.match((await frame()).footer, /Tap  Review/);
+assert.match((await frame()).footer, /Tap  Send now/);
 const first = (await frame()).body;
 if (process.env.EXPECT_REPLY_IDEAS === "1") {
   assert.match((await frame()).badge, /^AI /);
@@ -197,7 +208,6 @@ assert.equal((await frame()).title, "Maya");
 assert.deepEqual(await history("demo:maya"), original);
 await tap();
 assert.equal((await frame()).body, chosen);
-await tap();
 assert.equal((await frame()).title, "Send · Maya");
 assert.match((await frame()).footer, /Tap  Send now/);
 assert.deepEqual(await history("demo:maya"), original);
@@ -219,7 +229,7 @@ assert.match((await frame()).footer, /Tap  Save now/);
 await confirmReviewed();
 assert.match((await frame()).context, /Demo Saved/);
 await back();
-assert.equal((await frame()).split.heading, "Maya");
+assert.match(focusedRow(await frame()), /^● Maya · 1$|^Maya$/);
 await shortcut("Saved Messages");
 assert.equal((await frame()).title, "Saved Messages");
 assert.match((await frame()).body, new RegExp(chosen.slice(0, 12)));
@@ -239,7 +249,7 @@ await shot("09-reacted");
 await shortcut("Next unread chat");
 assert.equal((await frame()).title, "Build night");
 await tap();
-assert.equal((await frame()).title, "Reply · Build night");
+assert.equal((await frame()).title, "Send · Build night");
 if (process.env.EXPECT_REPLY_IDEAS === "1")
   assert.equal((await frame()).body, "Is River Cafe the final spot?");
 await gesture("down");

@@ -260,6 +260,9 @@ test("login page (jsdom, demo server): QR is an <img> data URL and the flow reac
     (doc.getElementById("simulate-scan") as HTMLButtonElement).click();
     await waitFor(() => /Signed in as Demo User/.test(doc.getElementById("status")!.textContent ?? ""));
     assert.equal(doc.getElementById("done-link")!.classList.contains("hidden"), false);
+    // UX pass SHOULD 9: demo auto-pairs, so the link just opens the glasses; tabs hide once signed in.
+    assert.equal(doc.getElementById("done-link")!.textContent, "Open your glasses");
+    assert.equal(doc.querySelector(".method-tabs")!.classList.contains("hidden"), true);
     assert.equal(manager.active().length, 0);
   } finally {
     dom.window.close();
@@ -305,6 +308,7 @@ test("login page (jsdom, demo server): phone path with a wrong code re-prompts, 
     ($("phone-number") as HTMLInputElement).value = "+15555550100";
     submit("phone-form");
     await waitFor(() => !$("code-form").classList.contains("hidden"));
+    assert.match(status(), /Demo mode: enter any 5-digit code/);
     ($("phone-code") as HTMLInputElement).value = "00000";
     submit("code-form");
     await waitFor(() => /not right/.test(status()));

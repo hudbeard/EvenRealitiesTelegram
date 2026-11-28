@@ -72,25 +72,25 @@ test("glasses composer never sends during selection/review/cancellation; only fi
   try {
     await app.start();
     assert.equal(app.frame.title, "Chats");
-    assert.equal(app.frame.split?.heading, "Maya");
+    assert.equal(app.menu!.rows[app.menu!.index].chatId, "demo:maya");
     await app.input("tap");
     assert.equal(app.frame.title, "Maya");
-    await app.input("tap");
-    assert.equal(app.frame.title, "Reply · Maya");
+    await app.input("tap"); // Reply lands on review with ideas, never a send
+    assert.equal(app.frame.title, "Send · Maya");
     assert.equal(app.frame.body, "I’ll check and get back to you.");
+    assert.match(app.frame.footer, /Swipe  Ideas/);
+    assert.match(app.frame.footer, /Tap  Send now/);
+    await app.input("tap"); // inside the 1 s entry guard: ignored
+    assert.equal(p.writes.length, 0);
     await app.input("down");
     assert.equal(app.frame.body, "Can you share a little more detail?");
-    await app.input("back");
+    await app.input("back"); // cancels, keeps the shown idea as the draft
+    assert.equal(app.frame.title, "Maya");
     assert.equal(p.writes.length, 0);
     await app.input("tap");
-    assert.equal(app.frame.title, "Reply · Maya");
-    assert.match(app.frame.footer, /Tap  Review/);
-    assert.equal(p.writes.length, 0);
-    await app.input("tap"); // ideas -> review, never a send
     assert.equal(app.frame.title, "Send · Maya");
-    assert.match(app.frame.footer, /Tap  Send now/);
-    assert.equal(p.writes.length, 0);
-    await app.input("tap"); // inside the 1 s entry guard: ignored
+    assert.equal(app.frame.body, "Can you share a little more detail?");
+    await app.input("tap"); // the opening tap's guard again
     assert.equal(p.writes.length, 0);
     assert.equal(app.frame.title, "Send · Maya");
     clock += 1000;

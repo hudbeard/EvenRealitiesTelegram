@@ -12,11 +12,11 @@ Not affiliated with Telegram or Even Realities.
 
 ## What happens on the glasses
 
-- **Inbox.** Launch directly into chats, with unread conversations first. Swipe to preview and tap to open. Hold in Chats to find a conversation by voice.
-- **Threads:** swipe messages, paginate full text, inspect the original replied-to message, search history and load older messages. Media is identified; view rich media in Telegram.
-- **Replies.** Tap an open message to see a ready-to-send reply and swipe for alternatives. Tap to review it, then Tap **Send now** to send the exact text shown (a tap within 1 second of opening review is ignored). Hold to dictate and release to review. Double tap keeps the draft attached to the source.
+- **Inbox.** Launch directly into chats, with unread conversations first. Rows read like `● Build night · 2`; the preview shows the chat type, unread count and time of the last message (`Group · 2 unread · 3m`, plus `Muted` when the chat's own Telegram notification setting is muted). Swipe to preview and tap to open. Hold in Chats to find a conversation by voice.
+- **Threads:** a message is marked read once it is fully on screen (long messages when you finish reading them; search results are not marked). Swiping past the last message opens the next unread chat, or a “You’re caught up” screen. Swipe messages, paginate full text, inspect the original replied-to message, search history and load older messages. Media is identified; view rich media in Telegram.
+- **Replies.** Tap an open message to open the review screen with a suggested reply (built-in rules, or an optional model) and swipe for alternatives. Tap **Send now** to send the exact text shown: two taps from the message. A tap within 1 second of opening review is ignored, Double tap goes back without sending, and the server still requires an explicit confirmation. Long replies get a paginated review first. Hold to dictate and release to review. Double tap keeps the draft attached to the source.
 - **Actions:** reply as yourself, write a new message, react with thumbs up/heart/check, or forward to Saved Messages. Cancellation preserves a draft. Missing receipts stay uncertain; writes are not automatically retried.
-- **Catch-up:** source-linked changes, unanswered questions, replies and your stated commitments. Read the evidence and open the underlying conversation. Manage its ten-chat selection entirely on G2.
+- **Catch-up:** source-linked changes, unanswered questions, replies and your stated commitments, labelled like `Build night · change`. Each card is one page (why plus the quote); Tap opens the source message. Manage its ten-chat selection entirely on G2.
 - **Saved Messages:** a real Telegram self-chat, readable and writable from the glasses.
 
 Swipe to select, tap to open, and double tap to go back. Tap then hold for Even Hub shortcuts such as New message, Find in chat, and Next unread chat. Hold on a message to dictate. Model-backed suggestions are optional and fall back to built-in replies. Double tap on Chats asks before exiting: Tap exits, Double tap goes back. The G2 display uses separate context and preview areas, brightness for focus, and native pickers for reactions and characters.
@@ -40,11 +40,11 @@ npm run personal:demo
 npm run glasses:simulate
 ```
 
-**Sign in (demo mode):** open http://127.0.0.1:3003/login. The demo QR "scans" itself after about 3 seconds, or click "Simulate the scan now". The page ends at "Signed in as Demo User". The phone tab accepts any number and any code except `00000` (which shows the wrong-code path). Demo mode makes no Telegram calls and never writes a session file.
+**Sign in (demo mode):** open http://127.0.0.1:3003/login. The demo QR "scans" itself after about 3 seconds, or click "Simulate the scan now". The page ends at "Signed in as Demo User" with an "Open your glasses" link (the method tabs hide once signed in). The phone tab accepts any number and any code except `00000` (which shows the wrong-code path). Demo mode makes no Telegram calls and never writes a session file.
 
 **Warning:** `/login` has no owner authentication. Keep this server on localhost and never host it on a public network.
 
-**To pair glasses:** Tap on the simulator for a 6-digit code (it counts down from 5:00; Double tap cancels), then Tap again to approve the demo.
+**To pair glasses:** in demo mode the glasses page pairs itself on boot, and again after an expired display session (401), and opens the inbox. If that fails it falls back to the manual flow: Tap for a 6-digit code (it counts down from 5:00; Double tap cancels), then Tap again to approve the demo. A live (non-demo) server never auto-pairs.
 
 **Display mirror:** http://127.0.0.1:3003/glasses.html shows what appears on the glasses.
 
@@ -98,7 +98,7 @@ npm run server:build
 npm run glasses:test
 ```
 
-56 automated tests (`npm test`) cover the sign-in state machine with a mocked Telegram (QR refresh, 2FA and wrong-code retries, cancel, timeouts, atomic save, hot pick-up, rate limits including status polls and page reloads), the login page in jsdom against the demo server, source revision binding, single dispatch, ambiguous delivery, account-wide access boundaries, exact new-message text, Saved Messages, read state, speech formatting, review pagination and cancellation, Disconnect landing on Welcome, and the idle-display health poll. The glasses smoke test drives official SDK gestures and captures 576×288 simulator framebuffers. Tester and QA ran `npm run glasses:test` on Even Hub simulator 0.9.5 on `cursor/hackathon-polish-9492` (pushed commit `a9070b2`, same tree as `b34eed6`) and recorded a PASS: "11 framebuffers, blank gesture capture, two-tap exact reply, cancellation, inline receipt, native shortcuts, save and reaction." QA's fresh-clone run at `b34eed6` also passed. This Coder pass did not re-run the simulator. No real Telegram messages are sent by these tests.
+82 automated tests (`npm test`) cover the UX pass (auto-mark-read, swipe into the next unread chat, two-tap send with the 1 s guard and server-side confirm, inbox density, demo-only auto-pair, Settings row restore, mute mapping, Catch-up labels),  the sign-in state machine with a mocked Telegram (QR refresh, 2FA and wrong-code retries, cancel, timeouts, atomic save, hot pick-up, rate limits including status polls and page reloads), the login page in jsdom against the demo server, source revision binding, single dispatch, ambiguous delivery, account-wide access boundaries, exact new-message text, Saved Messages, read state, speech formatting, review pagination and cancellation, Disconnect landing on Welcome, and the idle-display health poll. The glasses smoke test drives official SDK gestures and captures 576×288 simulator framebuffers. Tester ran `npm run glasses:test` at `f494e57` on Even Hub simulator 0.9.5 (headed) and recorded a PASS: "11 framebuffers, blank gesture capture, two-tap exact reply, cancellation, inline receipt, native shortcuts, save and reaction." QA independently ran the same script at `f494e57` on a fresh clone (loopback only) and recorded the same PASS; frames now read `Send · Maya` / `Send · Build night`. The smoke script's expectations were updated in `3a11d25`, `a42e831` and `679005c` to match the UX flow. This docs-only pass did not re-run the simulator. No real Telegram messages are sent by these tests.
 
 [Glasses-first verification and setup](docs/standalone.md) · [Submission draft](docs/submission-draft.md) · [Earlier personal prototype](docs/personal-account.md) · [Original bot prototype](docs/crew-prototype.md)
 
