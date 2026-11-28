@@ -128,7 +128,8 @@ async function shot(name) {
   console.log(name, (await frame()).title);
 }
 
-if ((await frame()).body.includes("Tap to connect")) {
+// Welcome, or a "Display session expired. Tap to pair again." boot.
+if (/Tap to (connect|pair)/.test((await frame()).body)) {
   await tap();
   await tap();
 }
