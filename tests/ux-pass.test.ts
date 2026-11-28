@@ -391,3 +391,92 @@ test("ux must4: thread context uses relative time and keeps UNREAD until seen; l
     h.close();
   }
 });
+
+// MUST 5 — auto-pair the demo/simulator only
+
+import { Store } from "../server/store.js";
+import {
+  AutoPair,
+  DisplaySession,
+  autoPairSynthetic,
+  canAutoPair,
+  memoryStorage,
+} from "../src/glasses/session.js";
+
+const DEMO_HEALTH = { ok: true, mode: "personal-demo", synthetic: true };
+const LIVE_HEALTH = { ok: true, mode: "personal", synthetic: false };
+
+/** Mirrors the /api/pair routes in server/personal/index.ts over a real Store. */
+function pairServer(demo: boolean) {
+  const store = new Store(":memory:", () => DEMO_NOW);
+  const calls: string[] = [];
+  const api = async (path: string, body?: any) => {
+    calls.push(path);
+    if (path === "/pair") return store.pair();
+    if (path === "/pair/approve") {
+      if (!demo) throw Object.assign(new Error("Approve pairing from your local terminal."), { status: 403 });
+      return { approved: store.approve(String(body?.code ?? "")) };
+    }
+    if (path.startsWith("/pair/")) return store.pairing(path.slice(6));
+    throw new Error("unexpected " + path);
+  };
+  return { store, calls, api };
+}
+
+test("ux must5: synthetic health auto-pairs without taps and stores a working token", async () => {
+  const s = pairServer(true);
+  const session = new DisplaySession(memoryStorage());
+  assert.equal(await autoPairSynthetic(session, s.api, DEMO_HEALTH), true);
+  assert.deepEqual(s.calls.map((c) => c.replace(/[0-9a-f]{64}/, ":id")), ["/pair", "/pair/approve", "/pair/:id"]);
+  assert.ok(session.paired);
+  assert.equal(s.store.authorize(session.token), true);
+  assert.equal(session.pairId, "");
+  assert.equal(session.pairCode, "");
+});
+
+test("ux must5: live or unknown health never auto-pairs and makes no request", async () => {
+  for (const health of [LIVE_HEALTH, { mode: "personal", synthetic: true }, { mode: "personal-demo", synthetic: "true" }, undefined]) {
+    const s = pairServer(false);
+    const session = new DisplaySession(memoryStorage());
+    assert.equal(canAutoPair(health), false);
+    assert.equal(await autoPairSynthetic(session, s.api, health), false);
+    assert.equal(await new AutoPair(session, s.api).run(health), false);
+    assert.deepEqual(s.calls, []);
+    assert.equal(session.paired, false);
+  }
+  // Even if a client were misled into trying, a live server refuses approval.
+  const s = pairServer(false);
+  await assert.rejects(autoPairSynthetic(new DisplaySession(memoryStorage()), s.api, DEMO_HEALTH), /local terminal/);
+});
+
+test("ux must5: a stale token (synthetic 401) is replaced by a fresh auto-pair", async () => {
+  const s = pairServer(true);
+  const session = new DisplaySession(memoryStorage());
+  session.remember("leftover-token-from-yesterday");
+  assert.equal(s.store.authorize(session.token), false);
+  session.clear(); // what api() does on a 401 before calling error()
+  const auto = new AutoPair(session, s.api);
+  assert.equal(await auto.run(DEMO_HEALTH), true);
+  assert.equal(s.store.authorize(session.token), true);
+});
+
+test("ux must5: auto-pair retries are bounded and refill after a successful start", async () => {
+  let calls = 0;
+  const failing = async () => {
+    calls++;
+    throw Object.assign(new Error("Server error"), { status: 500 });
+  };
+  const session = new DisplaySession(memoryStorage());
+  const auto = new AutoPair(session, failing, 2);
+  assert.equal(await auto.run(DEMO_HEALTH), false);
+  assert.equal(await auto.run(DEMO_HEALTH), false);
+  assert.equal(auto.remaining, 0);
+  assert.equal(await auto.run(DEMO_HEALTH), false);
+  assert.equal(calls, 2); // third run made no request: the caller falls back to CONNECT
+  auto.succeeded();
+  assert.equal(auto.remaining, 2);
+  // An approval that does not return a token is a failure, not a loop.
+  const noApprove = new AutoPair(session, async (p: string) => (p === "/pair" ? { id: "x", code: "1" } : { approved: false }));
+  assert.equal(await noApprove.run(DEMO_HEALTH), false);
+  assert.equal(session.paired, false);
+});

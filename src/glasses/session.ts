@@ -95,3 +95,69 @@ export async function startPairing(
   session.pairCode = p.code;
   return p;
 }
+
+export type Health = { synthetic?: unknown; mode?: unknown };
+type PairApi = (path: string, body?: unknown) => Promise<any>;
+
+/**
+ * Only the synthetic demo server is ever auto-paired. A live server needs
+ * the wearer's six-digit code approved from the server terminal (and its
+ * /api/pair/approve rejects requests without the local approval key).
+ */
+export function canAutoPair(health: Health | undefined) {
+  return health?.synthetic === true && health?.mode === "personal-demo";
+}
+
+/**
+ * Demo/simulator only: request a pairing code, approve it and store the
+ * display token without asking for taps. Returns false (and makes no
+ * request) unless `health` is the synthetic demo server.
+ */
+export async function autoPairSynthetic(
+  session: DisplaySession,
+  api: PairApi,
+  health: Health | undefined,
+) {
+  if (!canAutoPair(health)) return false;
+  if (session.paired) return true;
+  const p = await api("/pair", {});
+  const approved = await api("/pair/approve", { code: p.code });
+  if (approved?.approved !== true) return false;
+  const r = await api("/pair/" + p.id);
+  if (typeof r?.token !== "string" || !r.token) return false;
+  session.pairId = "";
+  session.pairCode = "";
+  session.remember(r.token);
+  return true;
+}
+
+/**
+ * Bounded auto-pair for boot and for a synthetic 401: at most `budget`
+ * tries until a start succeeds, so a server that keeps rejecting the new
+ * token cannot loop. `succeeded()` refills the budget.
+ */
+export class AutoPair {
+  private left: number;
+  constructor(
+    private session: DisplaySession,
+    private api: PairApi,
+    private budget = 2,
+  ) {
+    this.left = budget;
+  }
+  async run(health: Health | undefined) {
+    if (!canAutoPair(health) || this.left <= 0) return false;
+    this.left--;
+    try {
+      return await autoPairSynthetic(this.session, this.api, health);
+    } catch {
+      return false;
+    }
+  }
+  succeeded() {
+    this.left = this.budget;
+  }
+  get remaining() {
+    return this.left;
+  }
+}

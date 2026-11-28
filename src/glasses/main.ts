@@ -15,6 +15,8 @@ import {
   welcomeFrame,
   pairPromptBody,
   startPairing,
+  AutoPair,
+  type Health,
 } from "./session.js";
 import "./style.css";
 const host = document.getElementById("app")!;
@@ -23,6 +25,7 @@ host.innerHTML =
 const el = (id: string) => document.getElementById(id)!;
 const apiBase = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
 const session = new DisplaySession(localStorage);
+let health: Health | undefined;
 let bridge: EvenAppBridge | undefined,
   display: GlassesDisplay | undefined,
   running = true,
@@ -140,9 +143,39 @@ app.disconnected = () => {
   render(welcomeFrame());
   el("status").textContent = "Display disconnected. Tap to pair this display.";
 };
+const autoPair = new AutoPair(session, api);
+/** Demo/simulator: pair without taps, then open the inbox. */
+async function enterWithAutoPair() {
+  if (!(await autoPair.run(health))) return false;
+  stopPairing();
+  await app.start();
+  autoPair.succeeded();
+  healthPoll.start();
+  el("status").textContent = "Synthetic demo · no real messages sent";
+  return true;
+}
 function error(e: unknown) {
   el("status").textContent = (e as Error).message;
-  if (!session.token) {
+  // A synthetic 401 (stale display token): re-pair silently, a bounded number
+  // of times. Live servers never get here (canAutoPair is false).
+  if (
+    !session.token &&
+    (e as { status?: number }).status === 401 &&
+    autoPair.remaining > 0 &&
+    synthetic
+  ) {
+    void enterWithAutoPair()
+      .catch(() => false)
+      .then((ok) => {
+        if (!ok) showConnect(e);
+      });
+    return;
+  }
+  if (!session.token) showConnect(e);
+  else showError(e);
+}
+function showConnect(e: unknown) {
+  {
     stopPairing();
     render({
       title: "CONNECT TELEGRAM",
@@ -150,7 +183,10 @@ function error(e: unknown) {
       footer: "Tap: connect",
       icon: "glasses",
     });
-  } else {
+  }
+}
+function showError(e: unknown) {
+  {
     const previous = { ...app.frame },
       mode = app.mode,
       menu = app.menu,
@@ -332,12 +368,13 @@ function stop() {
 }
 window.addEventListener("pagehide", stop);
 safe(async () => {
-  const health = await api("/health");
-  synthetic = health.synthetic;
+  health = await api("/health");
+  synthetic = health!.synthetic === true;
   if (session.token) {
     await app.start();
+    autoPair.succeeded();
     healthPoll.start();
-  } else render(welcomeFrame());
+  } else if (!(await enterWithAutoPair())) render(welcomeFrame());
   el("status").textContent = synthetic
     ? "Synthetic demo server"
     : "Server ready";

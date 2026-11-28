@@ -138,8 +138,14 @@ function isExpiredBootDialogs401(entry) {
     entry.message === "[fetch] 401 Unauthorized /api/glasses/dialogs"
   );
 }
-// Welcome, or a "Display session expired. Tap to pair again." boot.
-const opening = await frame();
+// The synthetic demo auto-pairs on boot (and after a stale-token 401), so
+// the opening should become Chats on its own. Older builds showed Welcome
+// or "Display session expired. Tap to pair again."; the taps below cover that.
+let opening = await frame();
+for (let i = 0; i < 15 && opening.title !== "Chats"; i++) {
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  opening = await frame();
+}
 // Snapshot after the first frame (the boot 401 is already logged) and
 // before pairing taps, so only that expected line is allowed later.
 const boot401s = (await request(sim + "/api/console")).entries.filter(
