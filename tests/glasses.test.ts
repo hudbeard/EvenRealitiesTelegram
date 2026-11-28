@@ -67,6 +67,8 @@ test("glasses composer never sends during selection/review/cancellation; only fi
     throw Error(path);
   };
   const app = new GlassesApp(api, () => {});
+  let clock = 0;
+  app.now = () => clock;
   try {
     await app.start();
     assert.equal(app.frame.title, "Chats");
@@ -81,9 +83,18 @@ test("glasses composer never sends during selection/review/cancellation; only fi
     await app.input("back");
     assert.equal(p.writes.length, 0);
     await app.input("tap");
-    assert.equal(app.frame.body, "Can you share a little more detail?");
+    assert.equal(app.frame.title, "Reply · Maya");
+    assert.match(app.frame.footer, /Tap  Review/);
     assert.equal(p.writes.length, 0);
-    await app.input("tap");
+    await app.input("tap"); // ideas -> review, never a send
+    assert.equal(app.frame.title, "Send · Maya");
+    assert.match(app.frame.footer, /Tap  Send now/);
+    assert.equal(p.writes.length, 0);
+    await app.input("tap"); // inside the 1 s entry guard: ignored
+    assert.equal(p.writes.length, 0);
+    assert.equal(app.frame.title, "Send · Maya");
+    clock += 1000;
+    await app.input("tap"); // Send now
     assert.equal(p.writes.length, 1);
     assert.equal(p.writes[0].kind, "reply");
     assert.equal(p.writes[0].messageId, 11);
@@ -107,6 +118,8 @@ test("long text wraps without dropping letters and review paginates before confi
     },
     () => {},
   );
+  let clock = 0;
+  app.now = () => clock;
   app.chat = { id: "x", title: "Test", kind: "dm", unread: 0, readMaxId: 0 };
   app.review({ kind: "send", chatId: "x", messageId: 0, text }, "");
   assert.match(app.frame.badge ?? "", /^1 \/ /);
@@ -115,6 +128,7 @@ test("long text wraps without dropping letters and review paginates before confi
     await app.input("tap");
     assert.equal(writes, 0);
   }
+  clock += 1000;
   await app.input("tap");
   assert.equal(writes, 1);
 });

@@ -136,6 +136,12 @@ export class GlassesApp {
   operationId = "";
   pendingRevision = "";
   cards: BriefCard[] = [];
+  /** Clock for the Send-now guard; tests replace it. */
+  now: () => number = () => Date.now();
+  /** Called after the display session is revoked. main.ts clears the token and shows Welcome. */
+  disconnected: () => void = () => {};
+  /** A review's action cannot run before this time (1 s entry guard). */
+  private actionGuardUntil = 0;
   constructor(
     public api: Request,
     public changed: (frame: Frame) => void,
@@ -224,6 +230,26 @@ export class GlassesApp {
     await this.refresh();
     this.chatList();
   }
+  confirmExit() {
+    // Tap exits; Double tap (Back) returns to Chats on the same row.
+    const index = this.menu?.icon === "chats" ? this.menu.index : 0;
+    this.confirm(
+      "EXIT FIELDLINE?",
+      "Close Fieldline on your glasses.",
+      "Exit now",
+      () => this.exit(),
+      () => {
+        this.chatList();
+        if (this.menu?.icon === "chats") {
+          this.menu.index = Math.max(
+            0,
+            Math.min(index, this.menu.rows.length - 1),
+          );
+          this.drawMenu();
+        }
+      },
+    );
+  }
   async openSaved() {
     const saved = await this.api("/glasses/saved");
     await this.openChat(saved, "", undefined, undefined, () => this.chatList());
@@ -278,11 +304,16 @@ export class GlassesApp {
               },
             ]
           : []),
-        {
-          label: "Saved Messages",
-          detail: "Open your Telegram notebook.",
-          run: () => this.openSaved(),
-        },
+        // Only add Saved Messages if not already in matches (Designer fix #6)
+        ...(matches.some((c) => c.title === "Saved Messages")
+          ? []
+          : [
+              {
+                label: "Saved Messages",
+                detail: "Open your Telegram notebook.",
+                run: () => this.openSaved(),
+              },
+            ]),
         {
           label: "Catch-up",
           detail: "See changes, questions, and commitments.",
@@ -304,7 +335,7 @@ export class GlassesApp {
       ],
       filter || unreadOnly
         ? () => this.chatList("", false, this.chatSearchOrigin)
-        : () => this.exit(),
+        : () => this.confirmExit(),
       Math.max(
         0,
         matches.findIndex((chat) => chat.id === focusId),
@@ -611,6 +642,7 @@ export class GlassesApp {
     } = {},
   ) {
     this.mode = "read";
+    this.actionGuardUntil = 0;
     this.menu = undefined;
     this.readContext = options.context;
     this.readBadge = options.badge;
@@ -949,9 +981,8 @@ export class GlassesApp {
       ),
       body: lines.slice(0, 5).join("\n"),
       footer:
-        "Swipe  Ideas    Tap  " +
-        (lines.length > 5 ? "Review" : "Send") +
-        (this.voiceEnabled ? "    Hold  Dictate" : "    Double  Back"),
+        "Swipe  Ideas    Tap  Review" +
+        (this.voiceEnabled ? "    Hold  Dictate" : "    Double tap  Back"),
       shortcuts: [shortcut.messageActions],
     });
   }
@@ -974,12 +1005,8 @@ export class GlassesApp {
     const text = quick.choices[quick.index].text;
     this.setDraft(text);
     const action = this.replyAction(text);
-    if (wrap(text).length > 5) {
-      this.review(action, quick.source.revision, () => this.drawQuickReply());
-      return;
-    }
-    this.stageAction(action, quick.source.revision);
-    await this.send(() => this.drawQuickReply());
+    // Always go through review - no instant sends (Designer fix #2)
+    this.review(action, quick.source.revision, () => this.drawQuickReply());
   }
   async voiceText(text: string) {
     if (this.inputPurpose === "chats") {
@@ -1035,6 +1062,8 @@ export class GlassesApp {
         action: actionLabel === "Send" ? "Send now" : actionLabel + " now",
       },
     );
+    // The tap that opened review must not also confirm it.
+    this.actionGuardUntil = this.now() + 1000;
   }
   async send(cancel: Back = () => this.thread()) {
     const action = this.pending!;
@@ -1148,7 +1177,7 @@ export class GlassesApp {
         {
           label: "Catch-up chats",
           detail: "Choose up to 10 here",
-          run: () => this.watchlist(),
+          run: () => this.watchlist(0, () => this.catchup()),
         },
         {
           label: "Mark caught up",
@@ -1162,7 +1191,7 @@ export class GlassesApp {
       () => this.home(),
     );
   }
-  watchlist(index = 0) {
+  watchlist(index = 0, back?: Back) {
     this.showMenu(
       "Catch-up chats",
       "check",
@@ -1176,10 +1205,10 @@ export class GlassesApp {
             : [...this.watched, c.id];
           const d = await this.api("/watch", { ids });
           this.watched = d.watched;
-          this.watchlist(i);
+          this.watchlist(i, back);
         },
       })),
-      () => this.home(),
+      back ?? (() => this.home()), // Designer fix #7
       index,
       { badge: this.watched.length + " / 10" },
     );
@@ -1190,10 +1219,10 @@ export class GlassesApp {
       "glasses",
       [
         {
-          label: this.synthetic
-            ? "Demo server connected"
-            : "Telegram server connected",
-          detail: "Session lives on your backend",
+          label: this.synthetic ? "Demo server" : "Telegram server", // Designer fix #8
+          detail: this.synthetic
+            ? "Connected · Synthetic data"
+            : "Connected · Your account",
           run: () =>
             this.notice(
               "SERVER",
@@ -1216,22 +1245,41 @@ export class GlassesApp {
         {
           label: "Catch-up chats",
           detail: "Choose which chats appear in Catch-up.",
-          run: () => this.watchlist(),
+          run: () => this.watchlist(0, () => this.connection()),
         },
         {
-          label: "Disconnect this display",
-          detail: "Revoke its server access",
-          run: async () => {
-            await this.api("/logout", {});
-            location.reload();
-          },
+          label: "Disconnect display", // Designer fix #8
+          detail: "Revoke server access",
+          run: () =>
+            // Tap disconnects; Double tap (Back) returns to Settings.
+            this.confirm(
+              "DISCONNECT?",
+              "The glasses will need a new pairing code after disconnect.",
+              "Disconnect now",
+              async () => {
+                await this.api("/logout", {});
+                this.disconnected();
+              },
+              () => this.connection(),
+            ),
         },
       ],
       () => this.home(),
     );
   }
+  /** Informational screen: Tap and Double tap both continue. */
   notice(title: string, text: string, next: () => void | Promise<void>) {
     this.read(title, text, "info", next, next);
+  }
+  /** Confirmation: only Tap runs the action; Double tap (Back) cancels. */
+  confirm(
+    title: string,
+    text: string,
+    action: string,
+    run: () => void | Promise<void>,
+    cancel: Back,
+  ) {
+    this.read(title, text, "info", run, cancel, { action });
   }
   async input(event: Input, nativeIndex?: number) {
     if (this.busy || !this.active) return;
@@ -1294,7 +1342,10 @@ export class GlassesApp {
           Math.ceil(wrap(this.reading).length / this.readPageSize()) - 1,
         );
         if (event === "back") await this.onReadBack();
-        else if (event === "tap" && this.page === max) await this.onRead();
+        else if (event === "tap" && this.page === max) {
+          if (this.now() < this.actionGuardUntil) return;
+          await this.onRead();
+        }
         else {
           this.page = Math.max(
             0,

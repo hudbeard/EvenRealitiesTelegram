@@ -9,12 +9,34 @@ import { DemoPersonal } from "./demo.js";
 import { AccountTelegram } from "./mtproto.js";
 import { transcribe } from "./speech.js";
 import { suggestReplies } from "./reply-suggestions.js";
+import {
+  DemoClient,
+  LoginManager,
+  teleprotoLoginClient,
+  writeFileAtomic,
+} from "./login.js";
+import { loginRoutes } from "./login-routes.js";
+import { SignedOutProvider, SwitchableProvider } from "./switchable.js";
 const demo = process.argv.includes("--demo"),
   port = Number(process.env.PERSONAL_PORT ?? 3003),
   origin = process.env.PERSONAL_ORIGIN ?? `http://127.0.0.1:${port}`;
 await mkdir(".data", { recursive: true });
 const store = new Store(`.data/personal-${demo ? "demo" : "account"}.sqlite`);
-const provider = demo ? new DemoPersonal() : await AccountTelegram.connect();
+async function initialProvider() {
+  if (demo) return new DemoPersonal();
+  const session = await AccountTelegram.readSession();
+  if (!session) {
+    console.log("No Telegram session yet. Sign in at /login.");
+    return new SignedOutProvider();
+  }
+  try {
+    return await AccountTelegram.fromSession(session);
+  } catch (e) {
+    console.log(`Telegram session not usable (${(e as Error).message}). Sign in at /login.`);
+    return new SignedOutProvider();
+  }
+}
+const provider = new SwitchableProvider(await initialProvider());
 const service = new PersonalService(store, provider);
 if (demo && !service.watched().length)
   await service.select(["demo:maya", "demo:crew", "demo:design"]);
@@ -31,6 +53,30 @@ const approval = await readFile(keyPath, "utf8");
 const app = express();
 app.disable("x-powered-by");
 app.use(express.json({ limit: "16kb" }));
+// Telegram sign-in page (QR, phone code, 2FA).
+app.get("/login", (_req, res) => {
+  res.sendFile(resolve("public/login.html"));
+});
+const credentials = AccountTelegram.credentials();
+const sessionFile = AccountTelegram.sessionFile();
+const logins = new LoginManager({
+  apiId: credentials.apiId,
+  apiHash: credentials.apiHash,
+  demo,
+  createClient: () =>
+    demo
+      ? new DemoClient()
+      : teleprotoLoginClient(credentials.apiId, credentials.apiHash),
+  // Demo never writes a session file (LoginAttempt skips persist in demo).
+  persist: demo
+    ? async () => {
+        throw new Error("Demo mode never writes a session file.");
+      }
+    : (session) => writeFileAtomic(sessionFile, session),
+  // Hot pick-up: the running server switches to the new account at once.
+  onAuthorized: async (session) =>
+    provider.swap(await AccountTelegram.fromSession(session)),
+});
 app.use("/api", (req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("X-Content-Type-Options", "nosniff");
@@ -53,6 +99,8 @@ app.use("/api", (req, res, next) => {
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
 });
+// Login endpoints: origin-checked and rate-limited, no display token needed.
+app.use("/api", loginRoutes(logins));
 let pairAttempts = 0,
   windowEnd = Date.now() + 60000;
 app.post("/api/pair", (req, res) => {
@@ -85,8 +133,12 @@ app.get("/api/health", (_req, res) =>
     replyIdeasEnabled: !!(
       process.env.REPLY_AI_URL && process.env.REPLY_AI_MODEL
     ),
+    qrLoginAvailable: logins.available,
+    telegramSignedIn: demo || provider.signedIn,
   }),
 );
+
+// Protected API endpoints (require display token)
 app.use("/api", (req, res, next) => {
   const token = req.headers.authorization?.replace(/^Bearer /, "") ?? "";
   if (!store.authorize(token))
@@ -255,7 +307,8 @@ const server = app.listen(port, process.env.PERSONAL_HOST ?? "127.0.0.1", () =>
   ),
 );
 const close = () =>
-  server.close(() => {
+  server.close(async () => {
+    await logins.cancelAll();
     void provider.close().finally(() => {
       store.close();
       process.exit(0);

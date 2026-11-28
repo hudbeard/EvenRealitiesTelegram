@@ -86,10 +86,13 @@ export function catchup(
         m.text,
       )
     ) {
+      const quote = m.text.slice(0, 60).trim();
+      const shortTitle = chat.title.length > 15 ? chat.title.slice(0, 14) + "…" : chat.title;
+      const shortQuote = quote.length > 25 ? quote.slice(0, 24) + "…" : quote;
       cards.push({
         id: `commitment:${m.chatId}:${m.id}`,
         kind: "commitment",
-        title: "Something you said you would do",
+        title: shortTitle + " · " + shortQuote,
         why: "Quoted from your own message. Completion has not been inferred.",
         priority: 70,
         evidence,
