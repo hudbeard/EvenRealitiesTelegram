@@ -231,13 +231,23 @@ export class GlassesApp {
     this.chatList();
   }
   confirmExit() {
-    // Tap exits; Double tap (Back) returns to Chats.
+    // Tap exits; Double tap (Back) returns to Chats on the same row.
+    const index = this.menu?.icon === "chats" ? this.menu.index : 0;
     this.confirm(
       "EXIT FIELDLINE?",
       "Close Fieldline on your glasses.",
       "Exit now",
       () => this.exit(),
-      () => this.chatList(),
+      () => {
+        this.chatList();
+        if (this.menu?.icon === "chats") {
+          this.menu.index = Math.max(
+            0,
+            Math.min(index, this.menu.rows.length - 1),
+          );
+          this.drawMenu();
+        }
+      },
     );
   }
   async openSaved() {

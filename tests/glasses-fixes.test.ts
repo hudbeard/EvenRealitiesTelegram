@@ -93,6 +93,24 @@ test("exit confirm: Double tap on Chats asks, Double tap again cancels, Tap exit
   assert.equal(counts().exits, 1);
 });
 
+test("exit confirm: cancelling restores the Chats highlight", async () => {
+  const { app, counts } = await demoApp([]);
+  assert.equal(app.frame.title, "Chats");
+  await app.input("down");
+  const index = app.menu!.index;
+  const label = app.menu!.rows[index]!.label;
+  const heading = app.frame.split?.heading;
+  assert.ok(index > 0, "need a row other than the first to prove restore");
+  await app.input("back");
+  assert.equal(app.frame.title, "EXIT FIELDLINE?");
+  await app.input("back");
+  assert.equal(app.frame.title, "Chats");
+  assert.equal(app.menu!.index, index);
+  assert.equal(app.menu!.rows[app.menu!.index]!.label, label);
+  assert.equal(app.frame.split?.heading, heading);
+  assert.equal(counts().exits, 0);
+});
+
 test("notice: informational screens still continue on Tap or Double tap", async () => {
   const { app } = await demoApp([]);
   let continued = 0;
