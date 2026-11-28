@@ -1,6 +1,11 @@
 import type { Timers } from "../../server/personal/login.js";
 
-/** Deterministic clock + timers. `advance()` fires due timers in order. */
+/**
+ * Deterministic clock + timers. `advance()` fires due callbacks in order.
+ * It only drains the microtask queue between callbacks; it does not wait on
+ * I/O, zlib, or real wall-clock timers. Await the work those callbacks start
+ * (for login tests, `attempt.idle()`).
+ */
 export class FakeTimers implements Timers {
   private t: number;
   private seq = 0;
@@ -36,12 +41,24 @@ export class FakeTimers implements Timers {
     await flush();
   }
 }
-/** Let pending promise chains (and QR rendering) settle. */
-export async function flush(rounds = 20) {
-  for (let i = 0; i < rounds; i++) await new Promise((r) => setImmediate(r));
-}
-/** Flush until `cond()` holds (real microtasks/IO only, no fake time). */
-export async function until(cond: () => boolean, rounds = 500) {
-  for (let i = 0; i < rounds && !cond(); i++) await new Promise((r) => setImmediate(r));
-  if (!cond()) throw new Error("condition not reached");
+
+/**
+ * Drain the microtask queue (process.nextTick and Promise jobs) until quiet.
+ *
+ * Bounded by iteration count, never by wall-clock time, and never by a fixed
+ * number of setImmediate turns — those can finish before I/O such as zlib
+ * (used by QRCode.toDataURL) posts its callback. Do not use this to wait for
+ * I/O; await the promise that I/O completes.
+ */
+export async function flush(bound = 1000) {
+  for (let i = 0; i < bound; i++) {
+    const probes = { nextTick: 0, micro: 0 };
+    process.nextTick(() => probes.nextTick++);
+    queueMicrotask(() => probes.micro++);
+    await new Promise<void>((r) => process.nextTick(r));
+    await Promise.resolve();
+    // Only our two probes ran, and they each ran once: the queue is quiet.
+    if (probes.nextTick === 1 && probes.micro === 1) return;
+  }
+  throw new Error("flush: microtask queue did not settle");
 }

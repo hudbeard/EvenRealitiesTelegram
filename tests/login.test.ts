@@ -12,7 +12,7 @@ import {
 } from "../server/personal/login.js";
 import { SignedOutProvider, SwitchableProvider } from "../server/personal/switchable.js";
 import { DemoPersonal } from "../server/personal/demo.js";
-import { FakeTimers, flush, until } from "./helpers/fake-timers.js";
+import { FakeTimers } from "./helpers/fake-timers.js";
 import { FakeTelegram, rpc } from "./helpers/fake-telegram.js";
 
 function setup(overrides: Partial<LoginOptions> = {}) {
@@ -82,7 +82,10 @@ test("login: QR refreshes in place on the same client with no leak", async () =>
   const first = a.view().qr;
   for (let i = 2; i <= 6; i++) {
     await timers.advance(27_000);
-    await until(() => a.view().qrVersion === i);
+    // exportToken is started by the refresh timer; wait for the QR render
+    // promise (pngjs/zlib I/O), not for a fixed number of event-loop turns.
+    await a.idle();
+    assert.equal(a.view().qrVersion, i);
   }
   assert.equal(clients.length, 1, "one client for all refreshes");
   assert.equal(clients[0].connects, 1);
@@ -104,7 +107,7 @@ test("login: QR with 2FA, wrong password re-prompts, then correct password signs
   const c = clients[0];
   c.twoFactor = true;
   c.scan();
-  await flush();
+  await a.idle();
   assert.equal(a.state, "awaiting_password");
   assert.equal(a.view().hint, "pet name");
   assert.equal(a.view().qr, undefined);
@@ -210,7 +213,7 @@ test("login: cancel works in every live state and releases everything", async ()
     await a.start();
     clients[0].twoFactor = true;
     clients[0].scan();
-    await flush();
+    await a.idle();
     assert.equal(a.state, "awaiting_password");
     await a.cancel();
     assert.equal(a.state, "cancelled");
@@ -220,15 +223,19 @@ test("login: cancel works in every live state and releases everything", async ()
   // saving: too late to cancel, the attempt finishes
   {
     let release!: () => void;
+    let entered!: () => void;
+    const enteredSaving = new Promise<void>((r) => (entered = r));
     const { timers, clients, persisted, options } = setup();
     options.persist = async (s) => {
+      entered();
       await new Promise<void>((r) => (release = r));
       persisted.push(s);
     };
     const a = new LoginAttempt("qr", options);
     await a.start();
     clients[0].scan();
-    await flush();
+    // idle() would wait for persist to finish; wait for it to start instead.
+    await enteredSaving;
     assert.equal(a.state, "saving");
     await a.cancel();
     assert.equal(a.state, "saving");
@@ -312,7 +319,7 @@ test("login: a second concurrent start returns the same QR attempt; others get 4
   assert.equal(again.attempt, first.attempt);
   assert.equal(again.existing, true);
   assert.throws(() => m.start("phone", "+15555550100"), (e: unknown) => e instanceof LoginInputError && e.status === 429);
-  await flush();
+  await first.attempt.idle();
   assert.equal(clients.length, 1, "only one client ever created");
   await first.attempt.cancel();
   const next = m.start("phone", "+15555550100");
@@ -350,7 +357,7 @@ test("login: wrong password, cancel and errors never touch a good session; demo 
   await a.start();
   live.clients[0].twoFactor = true;
   live.clients[0].scan();
-  await flush();
+  await a.idle();
   await a.submitPassword("wrong");
   await a.cancel();
   assert.equal(await readFile(file, "utf8"), "GOOD");

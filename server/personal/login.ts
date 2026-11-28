@@ -160,6 +160,8 @@ export class LoginAttempt {
   readonly finished = new Promise<void>((resolve) => (this.settled = resolve));
   readonly createdAt: number;
   endedAt?: number;
+  /** In-flight work started by timers or Telegram updates (export, render, fail). */
+  private work: Promise<void> = Promise.resolve();
 
   constructor(
     readonly kind: LoginKind,
@@ -167,6 +169,29 @@ export class LoginAttempt {
   ) {
     this.timers = options.timers ?? realTimers;
     this.createdAt = this.timers.now();
+  }
+
+  /**
+   * Resolves when every tracked job (QR export/render, timeout, close) has
+   * settled. Tests wait on this instead of spinning the event loop. If a job
+   * starts another job, the wait continues until the queue is quiet.
+   */
+  async idle(): Promise<void> {
+    for (let i = 0; i < 100; i++) {
+      const current = this.work;
+      await current;
+      if (this.work === current) return;
+    }
+    throw new Error("login work did not settle");
+  }
+
+  /** Track a fire-and-forget job so idle() and unhandled-rejection handling see it. */
+  private follow(job: Promise<unknown>): void {
+    const settled = Promise.resolve(job).then(
+      () => undefined,
+      () => undefined,
+    );
+    this.work = this.work.then(() => settled);
   }
 
   get terminal() {
@@ -214,14 +239,22 @@ export class LoginAttempt {
     this.transition("connecting");
     this.schedule(
       () =>
-        void this.fail({
-          code: "TIMEOUT",
-          message: "Sign-in timed out. Start again.",
-        }),
+        this.follow(
+          this.fail({
+            code: "TIMEOUT",
+            message: "Sign-in timed out. Start again.",
+          }),
+        ),
       this.options.attemptTimeoutMs ?? 600_000,
     );
     const client = this.options.createClient();
     this.client = client;
+    const begun = this.establish(client);
+    this.follow(begun);
+    await begun;
+  }
+
+  private async establish(client: LoginClient) {
     try {
       await client.connect();
       if (this.terminal) {
@@ -231,7 +264,7 @@ export class LoginAttempt {
       }
       if (this.kind === "qr") {
         this.unsubscribe = client.onLoginTokenUpdate(() => {
-          if (this.state === "qr") void this.exportToken();
+          if (this.state === "qr") this.follow(this.exportToken());
         });
         await this.exportToken();
       } else await this.sendCode();
@@ -369,7 +402,7 @@ export class LoginAttempt {
       ),
     );
     this.refreshHandle = this.schedule(() => {
-      if (this.state === "qr") void this.exportToken();
+      if (this.state === "qr") this.follow(this.exportToken());
     }, delay);
   }
 
@@ -455,10 +488,12 @@ export class LoginAttempt {
 
   private wrongInput(code: LoginErrorCode, message: string) {
     if (++this.inputAttempts >= (this.options.maxInputAttempts ?? 5)) {
-      void this.fail({
-        code: "TOO_MANY_ATTEMPTS",
-        message: "Too many wrong attempts. Start again later.",
-      });
+      this.follow(
+        this.fail({
+          code: "TOO_MANY_ATTEMPTS",
+          message: "Too many wrong attempts. Start again later.",
+        }),
+      );
       return;
     }
     this.error = { code, message };
@@ -470,10 +505,12 @@ export class LoginAttempt {
     if (this.state !== state) this.transition(state);
     this.promptHandle = this.schedule(
       () =>
-        void this.fail({
-          code: "TIMEOUT",
-          message: "No answer in time. Start again.",
-        }),
+        this.follow(
+          this.fail({
+            code: "TIMEOUT",
+            message: "No answer in time. Start again.",
+          }),
+        ),
       this.options.promptTimeoutMs ?? 300_000,
     );
   }
