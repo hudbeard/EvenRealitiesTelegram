@@ -514,3 +514,35 @@ test("ux should10: Settings sub-screens return to their own row; watchlist foote
     h.close();
   }
 });
+
+// SHOULD 11 — muted from Telegram notify settings
+
+import { Api } from "teleproto";
+import { mutedNow } from "../server/personal/mtproto.js";
+
+test("ux should11: mutedNow reads the dialog's muteUntil; heading shows Muted within 286 px", async () => {
+  const now = 1_700_000_000_000;
+  const dialog = (muteUntil?: number) =>
+    new Api.Dialog({
+      peer: new Api.PeerUser({ userId: 1 as never }),
+      topMessage: 1,
+      readInboxMaxId: 0,
+      readOutboxMaxId: 0,
+      unreadCount: 0,
+      unreadMentionsCount: 0,
+      unreadReactionsCount: 0,
+      notifySettings: new Api.PeerNotifySettings({ muteUntil }),
+    } as never);
+  assert.equal(mutedNow(dialog(now / 1000 + 3600), now), true);
+  assert.equal(mutedNow(dialog(2147483647), now), true); // "forever"
+  assert.equal(mutedNow(dialog(now / 1000 - 1), now), false); // expired
+  assert.equal(mutedNow(dialog(undefined), now), false);
+  assert.equal(mutedNow({}, now), false);
+  const chat = { id: "x", title: "Build night", kind: "group" as const, unread: 2, readMaxId: 0, lastDate: DEMO_NOW - 3 * 60000, muted: true };
+  assert.equal(inboxHeading(chat, DEMO_NOW), "Group · 2 unread · 3m · Muted");
+  const quiet = inboxHeading({ ...chat, unread: 0, kind: "channel", lastDate: DEMO_NOW - 9 * 86_400_000 }, DEMO_NOW);
+  assert.ok(getTextWidth(quiet) <= 286, quiet);
+  assert.match(quiet, /Muted$/);
+  // Demo chats are never muted.
+  assert.ok((await new DemoPersonal(DEMO_NOW).dialogs()).every((c) => !c.muted));
+});

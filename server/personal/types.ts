@@ -7,6 +7,8 @@ export type Chat = {
   preview?: string;
   /** Epoch ms of the last message (inbox relative time). */
   lastDate?: number;
+  /** Notifications muted for this chat right now (Telegram per-chat setting). */
+  muted?: boolean;
 };
 export type Message = {
   id: number;

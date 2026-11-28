@@ -65,11 +65,15 @@ export function inboxHeading(chat: Chat, now: number) {
   const kind =
     chat.kind === "dm" ? "DM" : chat.kind === "group" ? "Group" : "Channel";
   const when = chat.lastDate ? relativeTime(chat.lastDate, now) : "";
-  const parts = [kind, chat.unread ? chat.unread + " unread" : "up to date", when];
-  let heading = parts.filter(Boolean).join(" · ");
-  if (getTextWidth(heading) > 286 && !chat.unread)
-    heading = [kind, when].filter(Boolean).join(" · ");
-  return fitLine(heading, 286);
+  const state = chat.unread ? chat.unread + " unread" : "up to date";
+  const muted = chat.muted ? "Muted" : "";
+  // Drop the least useful part first: "up to date", then the time.
+  const tries = [
+    [kind, state, when, muted],
+    [kind, chat.unread ? state : "", when, muted],
+    [kind, chat.unread ? state : "", muted],
+  ].map((parts) => parts.filter(Boolean).join(" · "));
+  return fitLine(tries.find((h) => getTextWidth(h) <= 286) ?? tries[2], 286);
 }
 function replyChoices(source: Source) {
   const time = source.text.match(/\b\d{1,2}:\d{2}(?:\s?[ap]\.?m\.?)?\b/i)?.[0];
