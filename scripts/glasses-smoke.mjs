@@ -128,8 +128,20 @@ async function shot(name) {
   console.log(name, (await frame()).title);
 }
 
+function isExpiredBootDialogs401(entry) {
+  return (
+    entry.level === "error" &&
+    entry.message === "[fetch] 401 Unauthorized /api/glasses/dialogs"
+  );
+}
 // Welcome, or a "Display session expired. Tap to pair again." boot.
-if (/Tap to (connect|pair)/.test((await frame()).body)) {
+const opening = await frame();
+// Snapshot after the first frame (the boot 401 is already logged) and
+// before pairing taps, so only that expected line is allowed later.
+const boot401s = (await request(sim + "/api/console")).entries.filter(
+  isExpiredBootDialogs401,
+).length;
+if (/Tap to (connect|pair)/.test(opening.body)) {
   await tap();
   await tap();
 }
@@ -239,8 +251,14 @@ await shortcut("Settings");
 await choose("Controls");
 await shot("11-controls");
 
-const errors = (await request(sim + "/api/console")).entries.filter(
-  (entry) => entry.level === "error",
+const entries = (await request(sim + "/api/console")).entries;
+const boot401 = entries.filter(isExpiredBootDialogs401);
+const errors = entries.filter(
+  (entry) => entry.level === "error" && !isExpiredBootDialogs401(entry),
+);
+assert.ok(
+  boot401.length <= boot401s,
+  "unexpected extra 401 on /api/glasses/dialogs after boot",
 );
 assert.deepEqual(errors, []);
 console.log(
