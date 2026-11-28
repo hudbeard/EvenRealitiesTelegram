@@ -88,3 +88,70 @@ test("ux must1: a failed read ack is best-effort and never blocks swiping", asyn
     h.close();
   }
 });
+
+// MUST 2 — swipe past the last message into the next unread chat
+
+test("ux must2: swiping past the last message opens the next unread chat on its first unread", async () => {
+  const h = demoHarness();
+  try {
+    await h.app.start();
+    await focusRow(h.app, "Maya");
+    await h.app.input("tap"); // Maya, first unread is the last message
+    assert.equal(h.app.frame.title, "Maya");
+    await h.app.input("down");
+    assert.equal(h.app.frame.title, "Build night");
+    assert.match(h.app.frame.body, /River Cafe/);
+    assert.match(h.app.frame.badge ?? "", /^2 \/ 3$/);
+    await h.app.settled();
+    assert.equal(h.p.chats.find((c) => c.id === "demo:maya")!.unread, 0);
+    await h.app.input("down");
+    assert.match(h.app.frame.body, /spare charger/);
+    // Nothing else unread: a short caught-up screen, not a dead end.
+    await h.app.input("down");
+    assert.equal(h.app.frame.title, "You’re caught up");
+    assert.match(h.app.frame.footer, /Tap  Inbox/);
+    await h.app.input("back"); // back to the same message
+    assert.equal(h.app.frame.title, "Build night");
+    assert.match(h.app.frame.body, /spare charger/);
+    await h.app.input("down");
+    await h.app.input("tap"); // Inbox, focused on this chat, no dots left
+    assert.equal(h.app.frame.title, "Chats");
+    assert.equal(h.app.menu!.rows[h.app.menu!.index].chatId, "demo:crew");
+    assert.ok(h.app.menu!.rows.every((r) => !r.label.startsWith("●")));
+    assert.equal(h.p.writes.length, 0);
+  } finally {
+    h.close();
+  }
+});
+
+test("ux must2: Back from the chat reached by swipe returns to the full inbox on that chat", async () => {
+  const h = demoHarness();
+  try {
+    await h.app.start();
+    await focusRow(h.app, "Maya");
+    await h.app.input("tap");
+    await h.app.input("down");
+    assert.equal(h.app.frame.title, "Build night");
+    await h.app.input("back");
+    assert.equal(h.app.frame.title, "Chats");
+    assert.equal(h.app.menu!.rows[h.app.menu!.index].chatId, "demo:crew");
+    assert.ok(h.app.menu!.rows.some((r) => r.label === "Design team"), "not the unread-only filter");
+  } finally {
+    h.close();
+  }
+});
+
+test("ux must2: inside a search, swiping past the end keeps the search end slot", async () => {
+  const h = demoHarness();
+  try {
+    await h.app.start();
+    await focusRow(h.app, "Maya");
+    await h.app.input("tap");
+    await h.app.openChat(h.app.chat!, "prototype");
+    await h.app.input("down");
+    assert.equal(h.app.frame.title, "Maya");
+    assert.match(h.app.frame.footer, /Clear search/);
+  } finally {
+    h.close();
+  }
+});

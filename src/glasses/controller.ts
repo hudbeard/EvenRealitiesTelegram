@@ -507,6 +507,39 @@ export class GlassesApp {
     // long messages (which need Read) are not marked read by a swipe.
     if (lines.length <= 5 && !this.query) void this.queueAck(m);
   }
+  /**
+   * The next chat with unread messages after the current one (inbox order,
+   * wrapping), refreshed from the server once pending read acks land.
+   */
+  async nextUnreadChat() {
+    await this.settled();
+    await this.refresh();
+    const here = this.chats.findIndex((chat) => chat.id === this.chat?.id);
+    const ordered =
+      here < 0
+        ? this.chats
+        : [...this.chats.slice(here + 1), ...this.chats.slice(0, here)];
+    return ordered.find((chat) => chat.unread > 0 && chat.id !== this.chat?.id);
+  }
+  /** Swipe down past the last message: next unread chat, or “caught up”. */
+  async continueToNextUnread() {
+    const next = await this.nextUnreadChat();
+    if (next) {
+      await this.openChat(next, "", undefined, undefined, () =>
+        this.chatList("", false, next.id),
+      );
+      return;
+    }
+    const here = this.chat?.id;
+    this.read(
+      "You’re caught up",
+      "No other unread chats.",
+      "check",
+      () => this.chatList("", false, here),
+      () => this.thread(),
+      { action: "Inbox" },
+    );
+  }
   /** Queue a best-effort read acknowledgement after any earlier ones. */
   queueAck(message: Source) {
     const run = this.ackChain.then(() => this.acknowledge(message));
@@ -611,10 +644,7 @@ export class GlassesApp {
           break;
         }
         case 7: {
-          await this.refresh();
-          const next = this.chats.find(
-            (chat) => chat.unread > 0 && chat.id !== this.chat?.id,
-          );
+          const next = await this.nextUnreadChat();
           if (next)
             await this.openChat(next, "", undefined, undefined, () =>
               this.chatList("", true, next.id),
@@ -1347,6 +1377,13 @@ export class GlassesApp {
           else if (this.messageIndex >= this.messages.length)
             await this.dictateNew();
           else await this.readMessage();
+        } else if (
+          event === "down" &&
+          !this.query &&
+          this.messages.length > 0 &&
+          this.messageIndex >= this.messages.length - 1
+        ) {
+          await this.continueToNextUnread();
         } else {
           this.messageIndex = Math.max(
             this.hasOlder ? -1 : 0,
