@@ -47,6 +47,15 @@ export function fitWithSuffix(
   return prefix + pxTruncate(title, Math.max(0, room)) + suffix;
 }
 
+/** Wrap and keep at most `max` lines; a cut last line ends with an ellipsis. */
+export function clampLines(text: string, max: number, pixels = 520) {
+  const lines = wrap(text, pixels);
+  if (lines.length <= max) return lines.join("\n");
+  const kept = lines.slice(0, max);
+  kept[max - 1] = pxTruncate(kept[max - 1].trimEnd() + " …", pixels);
+  return kept.join("\n");
+}
+
 /** Glanceable time: just now, 5m, 3h, yesterday, or a short date. */
 export function relativeTime(at: number, now: number) {
   const diff = now - at;

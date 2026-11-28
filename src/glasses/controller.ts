@@ -39,7 +39,7 @@ type Menu = {
   footer?: string;
 };
 export { wrap } from "./text.js";
-import { fitLine, fitWithSuffix, relativeTime, wrap } from "./text.js";
+import { clampLines, fitLine, fitWithSuffix, relativeTime, wrap } from "./text.js";
 import { getTextWidth } from "@evenrealities/pretext";
 const short = (s: string, n = 42) =>
   s.length > n ? s.slice(0, n - 1) + "…" : s;
@@ -1243,34 +1243,34 @@ export class GlassesApp {
       "spark",
       [
         ...this.cards.map((c) => ({
-          label: c.title,
-          detail: c.evidence[0].chatTitle + " · " + c.kind,
+          // Specific label: `Build night · change` (title kept within 188 px).
+          // ("commitment" is shortened to "to-do" so typical titles fit whole.)
+          label: fitWithSuffix(
+            "",
+            c.evidence[0].chatTitle,
+            " · " + (c.kind === "commitment" ? "to-do" : c.kind),
+            188,
+          ),
+          detail: c.title,
           run: async () => {
             const e = c.evidence[0],
               chat = this.chats.find((c) => c.id === e.chatId);
+            // One page: why + the first quote (sender in the context rail),
+            // so Tap goes straight to the source message.
             if (chat)
               this.read(
                 c.title,
-                c.why +
-                  "\n\n" +
-                  c.evidence
-                    .map(
-                      (e) =>
-                        e.chatTitle +
-                        " / " +
-                        e.sender +
-                        " #" +
-                        e.messageId +
-                        "\n" +
-                        e.quote,
-                    )
-                    .join("\n\n"),
+                clampLines(c.why + "\n\n“" + e.quote + "”", 5),
                 "spark",
                 () =>
                   this.openChat(chat, "", e.messageId, undefined, () =>
                     this.catchup(),
                   ),
                 () => this.catchup(),
+                {
+                  context: fitLine(e.chatTitle + " · " + e.sender, 540),
+                  action: "Open message",
+                },
               );
           },
         })),

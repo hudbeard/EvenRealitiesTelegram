@@ -52,6 +52,11 @@ export function demoHarness(
         q.get("before") ? Number(q.get("before")) : undefined,
       );
     }
+    if (path === "/brief") {
+      // Same default watchlist the demo server seeds at boot.
+      if (!s.watched().length) await s.select(["demo:maya", "demo:crew", "demo:design"]);
+      return s.brief();
+    }
     if (path === "/glasses/action") {
       if (body?.confirmed !== true)
         throw Object.assign(new Error("Review and confirm first."), { status: 400 });

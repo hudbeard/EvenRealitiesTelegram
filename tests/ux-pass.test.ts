@@ -546,3 +546,50 @@ test("ux should11: mutedNow reads the dialog's muteUntil; heading shows Muted wi
   // Demo chats are never muted.
   assert.ok((await new DemoPersonal(DEMO_NOW).dialogs()).every((c) => !c.muted));
 });
+
+// SHOULD 6 — specific Catch-up labels, one-page cards
+
+test("ux should6: Catch-up rows read `Chat · kind`; a card is one page and Tap opens the source", async () => {
+  const h = demoHarness();
+  try {
+    await h.app.start();
+    await focusRow(h.app, "Catch-up");
+    await h.app.input("tap");
+    assert.equal(h.app.menu!.title, "Catch-up");
+    const cards = h.app.cards;
+    assert.ok(cards.length > 0);
+    const labels = h.app.menu!.rows.slice(0, cards.length).map((r) => r.label);
+    labels.forEach((label, i) => {
+      const kind = cards[i].kind === "commitment" ? "to-do" : cards[i].kind;
+      assert.equal(label, cards[i].evidence[0].chatTitle + " · " + kind);
+      assert.ok(getTextWidth(label) <= 188, label);
+    });
+    assert.ok(labels.includes("Build night · change"), labels.join(" | "));
+    // Open the change card: one page, then Tap goes straight to the quoted message.
+    h.app.menu!.index = labels.indexOf("Build night · change");
+    await h.app.input("tap");
+    assert.equal(h.app.mode, "read");
+    assert.notEqual(h.app.frame.badge?.includes(" / "), true, "single page");
+    assert.match(h.app.frame.footer, /^Tap  Open message/);
+    assert.match(h.app.frame.context ?? "", /^Build night · /);
+    const card = cards[labels.indexOf("Build night · change")];
+    assert.match(h.app.frame.body, new RegExp(card.evidence[0].quote.slice(0, 12)));
+    await h.app.input("tap");
+    assert.equal(h.app.mode, "thread");
+    assert.equal(h.app.chat!.id, card.evidence[0].chatId);
+    assert.equal(h.app.messages[h.app.messageIndex].id, card.evidence[0].messageId);
+    await h.app.input("back");
+    assert.equal(h.app.menu!.title, "Catch-up");
+  } finally {
+    h.close();
+  }
+});
+
+test("ux should6: clampLines keeps at most N lines and marks the cut", async () => {
+  const { clampLines } = await import("../src/glasses/text.js");
+  assert.equal(clampLines("short", 5), "short");
+  const long = clampLines("word ".repeat(400), 5);
+  assert.equal(long.split("\n").length, 5);
+  assert.match(long, /(…|\.\.\.)$/);
+  for (const line of long.split("\n")) assert.ok(getTextWidth(line) <= 520);
+});
