@@ -46,22 +46,22 @@ function liveOptions(timers: FakeTimers): LoginOptions {
   };
 }
 
-test("login routes: new starts are rate-limited per IP and the window resets", async () => {
+test("login routes: explicit new starts are rate-limited per IP and the window resets", async () => {
   const timers = new FakeTimers();
   const s = await serve(new LoginManager(liveOptions(timers)), { now: timers.now, startLimit: 2 });
   try {
-    const first = await s.call("POST", "/login/qr/start", {});
+    const first = await s.call("POST", "/login/qr/start", { explicit: true });
     assert.equal(first.status, 201);
-    assert.equal((await s.call("POST", "/login/qr/start", {})).status, 200); // reuse is free
+    assert.equal((await s.call("POST", "/login/qr/start", { explicit: true })).status, 200); // reuse is free
     assert.equal((await s.call("POST", `/login/${first.body.id}/cancel`, {})).body.state, "cancelled");
-    const second = await s.call("POST", "/login/qr/start", {});
+    const second = await s.call("POST", "/login/qr/start", { explicit: true });
     assert.equal(second.status, 201);
     await s.call("POST", `/login/${second.body.id}/cancel`, {});
-    const third = await s.call("POST", "/login/qr/start", {});
+    const third = await s.call("POST", "/login/qr/start", { explicit: true });
     assert.equal(third.status, 429);
     assert.match(third.body.error, /Too many sign-in attempts/);
     await timers.advance(60_000);
-    assert.equal((await s.call("POST", "/login/qr/start", {})).status, 201);
+    assert.equal((await s.call("POST", "/login/qr/start", { explicit: true })).status, 201);
   } finally {
     await s.close();
   }
@@ -84,10 +84,66 @@ test("login routes: many status polls and page loads do not trip the start limit
       assert.equal(reuse.body.id, first.body.id);
     }
     await s.call("POST", `/login/${first.body.id}/cancel`, {});
-    const second = await s.call("POST", "/login/qr/start", {});
+    const a = await s.call("POST", "/login/qr/start", { explicit: true });
+    assert.equal(a.status, 201);
+    await s.call("POST", `/login/${a.body.id}/cancel`, {});
+    const b = await s.call("POST", "/login/qr/start", { explicit: true });
+    assert.equal(b.status, 201);
+    await s.call("POST", `/login/${b.body.id}/cancel`, {});
+    const blocked = await s.call("POST", "/login/qr/start", { explicit: true });
+    assert.equal(blocked.status, 429);
+    assert.match(blocked.body.error, /Too many sign-in attempts/);
+  } finally {
+    await s.close();
+  }
+});
+
+test("login routes: auto-starts after a finished attempt never trip the start limit", async () => {
+  const timers = new FakeTimers();
+  const manager = new LoginManager({
+    apiId: 0,
+    apiHash: "",
+    demo: true,
+    timers,
+    createClient: () => new DemoClient(timers, 3_000),
+    persist: async () => {},
+    onAuthorized: async () => {},
+  });
+  const s = await serve(manager, { now: timers.now, startLimit: 2 });
+  try {
+    const ids = new Set<string>();
+    for (let i = 0; i < 15; i++) {
+      const page = await fetch(s.base + "/login");
+      assert.equal(page.status, 200);
+      await page.text();
+      const start = await s.call("POST", "/login/qr/start", {});
+      assert.notEqual(start.status, 429, `auto-start ${i + 1} was locked out`);
+      assert.ok(start.status === 200 || start.status === 201);
+      const attempt = manager.get(start.body.id);
+      assert.ok(attempt);
+      await attempt.idle();
+      await timers.advance(3_000);
+      await attempt.idle();
+      const done = await s.call("GET", "/login/" + start.body.id);
+      assert.equal(done.body.state, "done", `auto-start ${i + 1} did not finish`);
+      ids.add(start.body.id);
+    }
+    assert.equal(ids.size, 15);
+
+    const live = await s.call("POST", "/login/qr/start", {});
+    assert.equal(live.status, 201);
+    const busy = await s.call("POST", "/login/phone/start", { phone: "+15555550100" });
+    assert.equal(busy.status, 429);
+    assert.match(busy.body.error, /already in progress/);
+
+    await s.call("POST", `/login/${live.body.id}/cancel`, {});
+    const first = await s.call("POST", "/login/qr/start", { explicit: true });
+    assert.equal(first.status, 201);
+    await s.call("POST", `/login/${first.body.id}/cancel`, {});
+    const second = await s.call("POST", "/login/qr/start", { explicit: true });
     assert.equal(second.status, 201);
     await s.call("POST", `/login/${second.body.id}/cancel`, {});
-    const blocked = await s.call("POST", "/login/qr/start", {});
+    const blocked = await s.call("POST", "/login/qr/start", { explicit: true });
     assert.equal(blocked.status, 429);
     assert.match(blocked.body.error, /Too many sign-in attempts/);
   } finally {

@@ -377,7 +377,7 @@
       if (current && !TERMINAL.includes(current.state))
         await api("POST", `/login/${current.id}/cancel`, {}).catch(() => {});
     }
-    async function begin(kind, phone) {
+    async function begin(kind, phone, explicit) {
       stopTimers();
       const gen = ++generation;
       shownQrVersion = -1;
@@ -386,7 +386,8 @@
       only("cancel");
       status("Connecting to Telegram…", "info");
       try {
-        const view = await api("POST", `/login/${kind}/start`, kind === "phone" ? { phone } : {});
+        const body = kind === "phone" ? { phone } : explicit ? { explicit: true } : {};
+        const view = await api("POST", `/login/${kind}/start`, body);
         if (gen !== generation) return;
         render(view);
         if (!TERMINAL.includes(view.state)) poll(gen);
@@ -413,7 +414,7 @@
     async function switchMethod(next) {
       method = next;
       document.querySelectorAll(".method-tab").forEach((t) => t.classList.toggle("active", t.dataset.method === next));
-      if (next === "qr") return begin("qr");
+      if (next === "qr") return begin("qr", undefined, true);
       stopTimers();
       generation++;
       await cancelCurrent();
@@ -461,7 +462,7 @@
         status(e.message, "error");
       }
     });
-    $("retry").addEventListener("click", () => (method === "qr" ? begin("qr") : switchMethod("phone")));
+    $("retry").addEventListener("click", () => (method === "qr" ? begin("qr", undefined, true) : switchMethod("phone")));
     window.addEventListener("pagehide", stopTimers);
     begin("qr");
   </script>

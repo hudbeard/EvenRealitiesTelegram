@@ -7,12 +7,14 @@ import { rateLimit } from "./rate-limit.js";
  * All responses are a LoginView or { error }.
  *
  * Rate limits (per IP, 60 s window):
- *   - New attempt starts (QR start, phone send-code): 6/min. Reusing an
- *     in-flight QR attempt does not count, so reloading /login cannot
- *     lock the user out.
- *   - Code and password submits: 20/min, same message.
+ *   - Explicit new starts only: QR POST { explicit: true } ("Try again",
+ *     switching back to the QR tab) and phone send-code. 6/min.
+ *   - Auto QR starts (the /login page load, body without explicit) never
+ *     consume that budget. They still reuse an in-flight QR attempt, or
+ *     create a new one after the last attempt finishes, and they still
+ *     obey the session cap (one active attempt).
+ *   - Code and password submits: 20/min, same sign-in-attempts message.
  *   - Status GETs: 600/min safety cap (page HTML at /login is unmetered).
- * Page loads and status polls never share the start budget.
  */
 export function loginRoutes(
   manager: LoginManager,
@@ -20,7 +22,7 @@ export function loginRoutes(
     now?: () => number;
     /** Status GET /login/:id requests per minute per IP (default 600). */
     pollLimit?: number;
-    /** New attempt starts per minute per IP (default 6). */
+    /** Explicit new starts (Try again / phone send-code) per minute per IP (default 6). */
     startLimit?: number;
     /** Code and password submits per minute per IP (default 20). */
     submitLimit?: number;
@@ -68,7 +70,15 @@ export function loginRoutes(
   };
   router.post("/login/qr/start", (req, res) => {
     try {
-      if (manager.wouldStart("qr") === "create" && deny(starts, req, res)) return;
+      // Only an explicit user retry counts. A page-load auto-start must
+      // never consume the start budget, even after the last attempt finished.
+      const explicit = req.body?.explicit === true;
+      if (
+        explicit &&
+        manager.wouldStart("qr") === "create" &&
+        deny(starts, req, res)
+      )
+        return;
       const { attempt, existing } = manager.start("qr");
       res.status(existing ? 200 : 201).json(attempt.view());
     } catch (err) {
