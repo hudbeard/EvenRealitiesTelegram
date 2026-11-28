@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { DemoPersonal } from "../server/personal/demo.js";
 import { GlassesApp, type Request } from "../src/glasses/controller.js";
 import { PairingCountdown } from "../src/glasses/pairing.js";
+import { IDLE_HEALTH_MS, IdleHealthPoll } from "../src/glasses/health-poll.js";
 import { requestTimeout, offlineMessage } from "../src/glasses/net.js";
 import {
   DisplaySession,
@@ -209,4 +210,68 @@ test("disconnect clears the stored token and lands on a Welcome that can start p
     ),
     /Already paired/,
   );
+});
+
+test("idle health poll: checks on the interval only while idle and reports a down server", async () => {
+  const timers = new FakeTimers();
+  let idle = true;
+  let checks = 0;
+  let downs = 0;
+  let fail = false;
+  const poll = new IdleHealthPoll({
+    intervalMs: IDLE_HEALTH_MS,
+    timers,
+    isIdle: () => idle,
+    check: async () => {
+      checks++;
+      if (fail) throw new Error("down");
+    },
+    onDown: () => downs++,
+  });
+  poll.start();
+  await timers.advance(IDLE_HEALTH_MS - 1);
+  assert.equal(checks, 0);
+  await timers.advance(1);
+  assert.equal(checks, 1);
+  assert.equal(downs, 0);
+  idle = false;
+  await timers.advance(IDLE_HEALTH_MS);
+  assert.equal(checks, 1);
+  idle = true;
+  await timers.advance(IDLE_HEALTH_MS);
+  assert.equal(checks, 2);
+  fail = true;
+  await timers.advance(IDLE_HEALTH_MS);
+  assert.equal(checks, 3);
+  assert.equal(downs, 1);
+  idle = false;
+  await timers.advance(IDLE_HEALTH_MS * 3);
+  assert.equal(checks, 3);
+  assert.equal(downs, 1);
+  poll.stop();
+  assert.equal(timers.pending, 0);
+  idle = true;
+  await timers.advance(IDLE_HEALTH_MS * 2);
+  assert.equal(checks, 3);
+  assert.equal(downs, 1);
+});
+
+test("idle health poll: stop() clears the timer mid-interval", async () => {
+  const timers = new FakeTimers();
+  let checks = 0;
+  const poll = new IdleHealthPoll({
+    intervalMs: IDLE_HEALTH_MS,
+    timers,
+    isIdle: () => true,
+    check: async () => {
+      checks++;
+    },
+    onDown: () => assert.fail("server was up"),
+  });
+  poll.start();
+  await timers.advance(1_000);
+  poll.stop();
+  assert.equal(timers.pending, 0);
+  await timers.advance(IDLE_HEALTH_MS * 3);
+  assert.equal(checks, 0);
 });

@@ -9,6 +9,7 @@ import { GlassesDisplay } from "./display.js";
 import { GlassesMicrophone, type VoiceMode } from "./voice.js";
 import { PairingCountdown, formatRemaining } from "./pairing.js";
 import { requestTimeout, offlineMessage } from "./net.js";
+import { IdleHealthPoll } from "./health-poll.js";
 import {
   DisplaySession,
   welcomeFrame,
@@ -114,6 +115,13 @@ const app = new GlassesApp(
   },
   () => startVoice("toggle"),
 );
+const healthPoll = new IdleHealthPoll({
+  isIdle: () => !!session.token && running && app.mode === "menu",
+  check: async () => {
+    await api("/health");
+  },
+  onDown: () => error(new Error(offlineMessage("GET"))),
+});
 function stopPairing() {
   session.pairId = "";
   session.pairCode = "";
@@ -127,6 +135,7 @@ function stopPairing() {
 // a 401 error (sometimes a frozen DISCONNECT? frame) that ignored taps.
 app.disconnected = () => {
   session.clear();
+  healthPoll.stop();
   stopPairing();
   render(welcomeFrame());
   el("status").textContent = "Display disconnected. Tap to pair this display.";
@@ -184,6 +193,7 @@ async function pollPair() {
       session.remember(r.token);
       stopPairing();
       await app.start();
+      healthPoll.start();
       el("status").textContent = synthetic
         ? "Synthetic demo · no real messages sent"
         : "Personal Telegram connected";
@@ -315,6 +325,7 @@ async function startVoice(mode: VoiceMode = "hold") {
 function stop() {
   running = false;
   app.active = false;
+  healthPoll.stop();
   clearTimeout(pollTimer);
   countdown?.stop();
   safe(() => mic.cancel());
@@ -323,8 +334,10 @@ window.addEventListener("pagehide", stop);
 safe(async () => {
   const health = await api("/health");
   synthetic = health.synthetic;
-  if (session.token) await app.start();
-  else render(welcomeFrame());
+  if (session.token) {
+    await app.start();
+    healthPoll.start();
+  } else render(welcomeFrame());
   el("status").textContent = synthetic
     ? "Synthetic demo server"
     : "Server ready";
@@ -359,6 +372,7 @@ void (async () => {
         if (!running) {
           running = true;
           app.active = true;
+          if (session.token) healthPoll.start();
           if (session.pairId) {
             countdown?.start();
             safe(pollPair);
