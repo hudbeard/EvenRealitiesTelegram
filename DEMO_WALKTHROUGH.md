@@ -18,7 +18,7 @@ npm run glasses:simulate     # terminal 2
 Open http://127.0.0.1:3003/login.
 
 - **QR tab** (opens by default): a QR image, "New code in 0:29" countdown, and a demo box. After about 3 seconds, or when you click **Simulate the scan now**, the page shows **"Signed in as Demo User. Your server is using this account now."** and an "Open your glasses" link; the QR / Phone tabs hide.
-- **Phone tab:** enter any number with a country code, then **Send code**. Code `00000` shows "That code is not right. Try again." and keeps the form; any other code signs in as Demo User.
+- **Phone tab:** enter any number with a country code, then **Send code**. The page says "Demo mode: enter any 5-digit code." Code `00000` shows "That code is not right. Try again." and keeps the form; any other code signs in as Demo User. (Live sign-in still says "Telegram sent you a code.")
 - **Cancel sign-in** works at any step; **Try again** restarts.
 - Demo mode makes no Telegram calls and never writes `.data/personal.session`.
 

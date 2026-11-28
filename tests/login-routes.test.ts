@@ -308,6 +308,7 @@ test("login page (jsdom, demo server): phone path with a wrong code re-prompts, 
     ($("phone-number") as HTMLInputElement).value = "+15555550100";
     submit("phone-form");
     await waitFor(() => !$("code-form").classList.contains("hidden"));
+    assert.match(status(), /Demo mode: enter any 5-digit code/);
     ($("phone-code") as HTMLInputElement).value = "00000";
     submit("code-form");
     await waitFor(() => /not right/.test(status()));

@@ -336,7 +336,13 @@
           break;
         case "awaiting_code":
           only("code-form", "cancel");
-          status(err || "Telegram sent you a code.", err ? "error" : "info");
+          status(
+            err ||
+              (view.demo
+                ? "Demo mode: enter any 5-digit code."
+                : "Telegram sent you a code."),
+            err ? "error" : "info",
+          );
           break;
         case "awaiting_password":
           only("password-form", "cancel");
