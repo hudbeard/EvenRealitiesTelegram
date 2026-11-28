@@ -320,6 +320,8 @@
     function render(view) {
       attempt = view;
       const err = view.error?.message ?? "";
+      // Signed in: the QR / Phone choice is moot, so hide it.
+      document.querySelector(".method-tabs").classList.toggle("hidden", view.state === "done");
       switch (view.state) {
         case "idle":
         case "connecting":
@@ -347,6 +349,10 @@
           break;
         case "done":
           only("done-link");
+          // The synthetic demo display pairs itself on boot (no code to approve).
+          $("done-link").textContent = view.demo
+            ? "Open your glasses"
+            : "Open the glasses mirror and pair your display";
           status(
             "Signed in as " + (view.user?.name ?? "your account") + ". " +
               (view.pickedUp ? "Your server is using this account now." : "Saved. Restart the server to use it."),
