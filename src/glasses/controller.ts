@@ -1306,10 +1306,14 @@ export class GlassesApp {
       })),
       back ?? (() => this.home()), // Designer fix #7
       index,
-      { badge: this.watched.length + " / 10" },
+      {
+        badge: this.watched.length + " / 10",
+        footer: "Swipe  Select     Tap  Toggle     Double tap  Back",
+      },
     );
   }
-  connection() {
+  /** Settings; sub-screens return to the row they came from (`index`). */
+  connection(index = 0) {
     this.showMenu(
       "Settings",
       "glasses",
@@ -1325,7 +1329,7 @@ export class GlassesApp {
               this.synthetic
                 ? "Synthetic data. No Telegram account connected."
                 : "Personal Telegram account session is stored on your server.\nThe phone hosts Even Hub and handles setup.",
-              () => this.connection(),
+              () => this.connection(0),
             ),
         },
         {
@@ -1335,13 +1339,13 @@ export class GlassesApp {
             this.notice(
               "GLASSES CONTROLS",
               "Swipe to move. Tap to open.\nHold a message to dictate a reply.\nHold in Chats to find a chat.\nDouble tap to go back.\nTap then hold for shortcuts.",
-              () => this.connection(),
+              () => this.connection(1),
             ),
         },
         {
           label: "Catch-up chats",
           detail: "Choose which chats appear in Catch-up.",
-          run: () => this.watchlist(0, () => this.connection()),
+          run: () => this.watchlist(0, () => this.connection(2)),
         },
         {
           label: "Disconnect display", // Designer fix #8
@@ -1356,11 +1360,12 @@ export class GlassesApp {
                 await this.api("/logout", {});
                 this.disconnected();
               },
-              () => this.connection(),
+              () => this.connection(3),
             ),
         },
       ],
       () => this.home(),
+      index,
     );
   }
   /** Informational screen: Tap and Double tap both continue. */

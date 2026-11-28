@@ -480,3 +480,37 @@ test("ux must5: auto-pair retries are bounded and refill after a successful star
   assert.equal(await noApprove.run(DEMO_HEALTH), false);
   assert.equal(session.paired, false);
 });
+
+// SHOULD 10 — Settings keeps its row; watchlist footer says Toggle
+
+test("ux should10: Settings sub-screens return to their own row; watchlist footer is Tap  Toggle", async () => {
+  const h = demoHarness();
+  try {
+    await h.app.start();
+    await focusRow(h.app, "Settings");
+    await h.app.input("tap");
+    assert.equal(h.app.frame.title, "Settings");
+    await h.app.input("down"); // Controls
+    await h.app.input("tap");
+    assert.equal(h.app.frame.title, "GLASSES CONTROLS");
+    await h.app.input("back");
+    assert.equal(h.app.menu!.title, "Settings");
+    assert.equal(h.app.menu!.index, 1);
+    await h.app.input("down"); // Catch-up chats
+    await h.app.input("tap");
+    assert.equal(h.app.menu!.title, "Catch-up chats");
+    assert.match(h.app.frame.footer, /Tap  Toggle/);
+    assert.ok(getTextWidth(h.app.frame.footer) <= 548);
+    await h.app.input("back");
+    assert.equal(h.app.menu!.index, 2);
+    await h.app.input("down"); // Disconnect display
+    await h.app.input("tap");
+    assert.equal(h.app.frame.title, "DISCONNECT?");
+    await h.app.input("back"); // cancel stays safe
+    assert.equal(h.app.menu!.title, "Settings");
+    assert.equal(h.app.menu!.index, 3);
+    assert.ok(!h.calls.some((c) => c.path === "/logout"));
+  } finally {
+    h.close();
+  }
+});
