@@ -224,6 +224,17 @@ export class GlassesApp {
     await this.refresh();
     this.chatList();
   }
+  confirmExit() {
+    // Designer fix #4: Confirm before exit
+    this.notice(
+      "EXIT TO SYSTEM",
+      "Double tap again to exit this app.",
+      async () => {
+        await this.exit();
+      },
+      "info"
+    );
+  }
   async openSaved() {
     const saved = await this.api("/glasses/saved");
     await this.openChat(saved, "", undefined, undefined, () => this.chatList());
@@ -278,11 +289,16 @@ export class GlassesApp {
               },
             ]
           : []),
-        {
-          label: "Saved Messages",
-          detail: "Open your Telegram notebook.",
-          run: () => this.openSaved(),
-        },
+        // Only add Saved Messages if not already in matches (Designer fix #6)
+        ...(matches.some((c) => c.title === "Saved Messages")
+          ? []
+          : [
+              {
+                label: "Saved Messages",
+                detail: "Open your Telegram notebook.",
+                run: () => this.openSaved(),
+              },
+            ]),
         {
           label: "Catch-up",
           detail: "See changes, questions, and commitments.",
@@ -304,7 +320,7 @@ export class GlassesApp {
       ],
       filter || unreadOnly
         ? () => this.chatList("", false, this.chatSearchOrigin)
-        : () => this.exit(),
+        : () => this.confirmExit(),
       Math.max(
         0,
         matches.findIndex((chat) => chat.id === focusId),
@@ -949,9 +965,8 @@ export class GlassesApp {
       ),
       body: lines.slice(0, 5).join("\n"),
       footer:
-        "Swipe  Ideas    Tap  " +
-        (lines.length > 5 ? "Review" : "Send") +
-        (this.voiceEnabled ? "    Hold  Dictate" : "    Double  Back"),
+        "Swipe  Ideas    Tap  Review" +
+        (this.voiceEnabled ? "    Hold  Dictate" : "    Double tap  Back"),
       shortcuts: [shortcut.messageActions],
     });
   }
@@ -974,12 +989,8 @@ export class GlassesApp {
     const text = quick.choices[quick.index].text;
     this.setDraft(text);
     const action = this.replyAction(text);
-    if (wrap(text).length > 5) {
-      this.review(action, quick.source.revision, () => this.drawQuickReply());
-      return;
-    }
-    this.stageAction(action, quick.source.revision);
-    await this.send(() => this.drawQuickReply());
+    // Always go through review - no instant sends (Designer fix #2)
+    this.review(action, quick.source.revision, () => this.drawQuickReply());
   }
   async voiceText(text: string) {
     if (this.inputPurpose === "chats") {
@@ -1148,7 +1159,7 @@ export class GlassesApp {
         {
           label: "Catch-up chats",
           detail: "Choose up to 10 here",
-          run: () => this.watchlist(),
+          run: () => this.watchlist(0, () => this.catchup()),
         },
         {
           label: "Mark caught up",
@@ -1162,7 +1173,7 @@ export class GlassesApp {
       () => this.home(),
     );
   }
-  watchlist(index = 0) {
+  watchlist(index = 0, back?: Back) {
     this.showMenu(
       "Catch-up chats",
       "check",
@@ -1172,14 +1183,14 @@ export class GlassesApp {
           "Tap to " + (this.watched.includes(c.id) ? "remove" : "include"),
         run: async () => {
           const ids = this.watched.includes(c.id)
-            ? this.watched.filter((id) => id !== c.id)
+            ? this.watched.includes(c.id)
             : [...this.watched, c.id];
           const d = await this.api("/watch", { ids });
           this.watched = d.watched;
-          this.watchlist(i);
+          this.watchlist(i, back);
         },
       })),
-      () => this.home(),
+      back ?? (() => this.home()), // Designer fix #7
       index,
       { badge: this.watched.length + " / 10" },
     );
@@ -1190,10 +1201,10 @@ export class GlassesApp {
       "glasses",
       [
         {
-          label: this.synthetic
-            ? "Demo server connected"
-            : "Telegram server connected",
-          detail: "Session lives on your backend",
+          label: this.synthetic ? "Demo server" : "Telegram server", // Designer fix #8
+          detail: this.synthetic
+            ? "Connected · Synthetic data"
+            : "Connected · Your account",
           run: () =>
             this.notice(
               "SERVER",
@@ -1216,14 +1227,22 @@ export class GlassesApp {
         {
           label: "Catch-up chats",
           detail: "Choose which chats appear in Catch-up.",
-          run: () => this.watchlist(),
+          run: () => this.watchlist(0, () => this.connection()),
         },
         {
-          label: "Disconnect this display",
-          detail: "Revoke its server access",
-          run: async () => {
-            await this.api("/logout", {});
-            location.reload();
+          label: "Disconnect display", // Designer fix #8
+          detail: "Revoke server access",
+          run: () => {
+            // Designer fix #11: Confirm before disconnect
+            this.notice(
+              "DISCONNECT?",
+              "The glasses will need a new pairing code after disconnect.",
+              async () => {
+                await this.api("/logout", {});
+                location.reload();
+              },
+              "info"
+            );
           },
         },
       ],

@@ -30,25 +30,47 @@ let current: Frame = {
   icon: "telegram",
 };
 async function api(path: string, body?: unknown) {
-  const r = await fetch(apiBase + "/api" + path, {
-    method: body === undefined ? "GET" : "POST",
-    headers: {
-      authorization: "Bearer " + token,
-      ...(body === undefined ? {} : { "content-type": "application/json" }),
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    signal: AbortSignal.timeout(20000),
-  });
-  const data = await r.json();
-  if (r.status === 401) {
-    token = "";
-    localStorage.removeItem("fieldline.glasses.session");
-  }
-  if (!r.ok)
-    throw Object.assign(new Error(data.error ?? "Server unavailable."), {
-      status: r.status,
+  try {
+    const r = await fetch(apiBase + "/api" + path, {
+      method: body === undefined ? "GET" : "POST",
+      headers: {
+        authorization: "Bearer " + token,
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal: AbortSignal.timeout(3000), // Faster timeout: 3s instead of 20s
     });
-  return data;
+    const data = await r.json();
+    if (r.status === 401) {
+      token = "";
+      localStorage.removeItem("fieldline.glasses.session");
+      throw Object.assign(
+        new Error("Display session expired. Tap to pair again."),
+        { status: 401 }
+      );
+    }
+    if (!r.ok)
+      throw Object.assign(
+        new Error(data.error ?? "Server error. Nothing was sent."),
+        { status: r.status }
+      );
+    return data;
+  } catch (err: any) {
+    // Better error messages (Designer fix #3)
+    if (err.name === "TimeoutError" || err.name === "AbortError") {
+      throw Object.assign(
+        new Error("Can't reach your server. Nothing was sent."),
+        { status: 0, timeout: true }
+      );
+    }
+    if (err.name === "TypeError" && err.message.includes("fetch")) {
+      throw Object.assign(
+        new Error("Can't reach your server. Nothing was sent."),
+        { status: 0, network: true }
+      );
+    }
+    throw err;
+  }
 }
 function render(frame: Frame) {
   current = frame;
@@ -302,7 +324,8 @@ void (async () => {
         return;
       }
       if (type === OsEventTypeList.FOREGROUND_ENTER_EVENT) {
-        foregroundOverlay = running;
+        // Menu opened - mark as overlay
+        foregroundOverlay = true;
         if (!running) {
           running = true;
           app.active = true;
@@ -312,9 +335,8 @@ void (async () => {
         return;
       }
       if (type === OsEventTypeList.FOREGROUND_EXIT_EVENT) {
-        if (foregroundOverlay) {
-          foregroundOverlay = false;
-        } else stop();
+        // Menu closed - never stop app (Designer fix #4)
+        foregroundOverlay = false;
         return;
       }
       if (!running) return;
