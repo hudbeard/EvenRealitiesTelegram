@@ -639,6 +639,18 @@ export class LoginManager {
     return typeof id === "string" ? this.attempts.get(id) : undefined;
   }
   /**
+   * What start(kind) will do: reuse an in-flight QR attempt, create a new
+   * one, or reject because another attempt is already running.
+   */
+  wouldStart(kind: LoginKind): "reuse" | "create" | "busy" {
+    const active = this.active();
+    if (active.length >= (this.options.maxActive ?? 1)) {
+      const same = active.find((a) => a.kind === kind && kind === "qr");
+      return same ? "reuse" : "busy";
+    }
+    return "create";
+  }
+  /**
    * Start an attempt. If the cap is reached, an active attempt of the same
    * kind is returned instead of creating a second one; otherwise 429.
    */
@@ -648,15 +660,17 @@ export class LoginManager {
         503,
         "Set TELEGRAM_API_ID and TELEGRAM_API_HASH on the server first.",
       );
-    const active = this.active();
-    if (active.length >= (this.options.maxActive ?? 1)) {
-      const same = active.find((a) => a.kind === kind && kind === "qr");
-      if (same) return { attempt: same, existing: true };
+    const decision = this.wouldStart(kind);
+    if (decision === "reuse") {
+      const same = this.active().find((a) => a.kind === kind && kind === "qr");
+      if (!same) throw new LoginInputError(429, "A sign-in is already in progress. Cancel it first.");
+      return { attempt: same, existing: true };
+    }
+    if (decision === "busy")
       throw new LoginInputError(
         429,
         "A sign-in is already in progress. Cancel it first.",
       );
-    }
     const attempt = new LoginAttempt(kind, this.options);
     this.attempts.set(attempt.id, attempt);
     void attempt.start(phone);

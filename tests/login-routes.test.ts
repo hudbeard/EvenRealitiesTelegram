@@ -46,31 +46,71 @@ function liveOptions(timers: FakeTimers): LoginOptions {
   };
 }
 
-test("login routes: start requests are rate-limited per IP and the window resets", async () => {
+test("login routes: new starts are rate-limited per IP and the window resets", async () => {
   const timers = new FakeTimers();
   const s = await serve(new LoginManager(liveOptions(timers)), { now: timers.now, startLimit: 2 });
   try {
-    const a = await s.call("POST", "/login/qr/start", {});
-    assert.equal(a.status, 201);
-    assert.equal((await s.call("POST", "/login/qr/start", {})).status, 200); // same attempt back
+    const first = await s.call("POST", "/login/qr/start", {});
+    assert.equal(first.status, 201);
+    assert.equal((await s.call("POST", "/login/qr/start", {})).status, 200); // reuse is free
+    assert.equal((await s.call("POST", `/login/${first.body.id}/cancel`, {})).body.state, "cancelled");
+    const second = await s.call("POST", "/login/qr/start", {});
+    assert.equal(second.status, 201);
+    await s.call("POST", `/login/${second.body.id}/cancel`, {});
     const third = await s.call("POST", "/login/qr/start", {});
     assert.equal(third.status, 429);
     assert.match(third.body.error, /Too many sign-in attempts/);
     await timers.advance(60_000);
-    assert.notEqual((await s.call("POST", "/login/qr/start", {})).status, 429);
+    assert.equal((await s.call("POST", "/login/qr/start", {})).status, 201);
   } finally {
     await s.close();
   }
 });
 
-test("login routes: overall limit applies to polling too", async () => {
+test("login routes: many status polls and page loads do not trip the start limit", async () => {
   const timers = new FakeTimers();
-  const s = await serve(new LoginManager(liveOptions(timers)), { now: timers.now, limit: 3 });
+  const s = await serve(new LoginManager(liveOptions(timers)), { now: timers.now, startLimit: 2 });
+  try {
+    const first = await s.call("POST", "/login/qr/start", {});
+    assert.equal(first.status, 201);
+    for (let i = 0; i < 40; i++) {
+      const page = await fetch(s.base + "/login");
+      assert.equal(page.status, 200);
+      await page.text();
+      const poll = await s.call("GET", "/login/" + first.body.id);
+      assert.equal(poll.status, 200, "status GET must not share the start budget");
+      const reuse = await s.call("POST", "/login/qr/start", {});
+      assert.equal(reuse.status, 200);
+      assert.equal(reuse.body.id, first.body.id);
+    }
+    await s.call("POST", `/login/${first.body.id}/cancel`, {});
+    const second = await s.call("POST", "/login/qr/start", {});
+    assert.equal(second.status, 201);
+    await s.call("POST", `/login/${second.body.id}/cancel`, {});
+    const blocked = await s.call("POST", "/login/qr/start", {});
+    assert.equal(blocked.status, 429);
+    assert.match(blocked.body.error, /Too many sign-in attempts/);
+  } finally {
+    await s.close();
+  }
+});
+
+test("login routes: status polls have a separate high cap, not the start message", async () => {
+  const timers = new FakeTimers();
+  const s = await serve(new LoginManager(liveOptions(timers)), {
+    now: timers.now,
+    pollLimit: 3,
+    startLimit: 6,
+  });
   try {
     const { body } = await s.call("POST", "/login/qr/start", {});
     assert.equal((await s.call("GET", "/login/" + body.id)).status, 200);
     assert.equal((await s.call("GET", "/login/" + body.id)).status, 200);
-    assert.equal((await s.call("GET", "/login/" + body.id)).status, 429);
+    assert.equal((await s.call("GET", "/login/" + body.id)).status, 200);
+    const tripped = await s.call("GET", "/login/" + body.id);
+    assert.equal(tripped.status, 429);
+    assert.match(tripped.body.error, /Too many requests/);
+    assert.doesNotMatch(tripped.body.error, /sign-in attempts/);
   } finally {
     await s.close();
   }
