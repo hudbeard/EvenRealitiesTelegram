@@ -81,9 +81,12 @@ test("glasses composer never sends during selection/review/cancellation; only fi
     await app.input("back");
     assert.equal(p.writes.length, 0);
     await app.input("tap");
-    assert.equal(app.frame.body, "Can you share a little more detail?");
+    // Quick replies now go through review (Designer fix #2)
+    assert.match(app.frame.title, /REVIEW|Maya/);
     assert.equal(p.writes.length, 0);
-    await app.input("tap");
+    await app.input("tap"); // Confirm in review
+    assert.equal(p.writes.length, 0);
+    await app.input("tap"); // Send
     assert.equal(p.writes.length, 1);
     assert.equal(p.writes[0].kind, "reply");
     assert.equal(p.writes[0].messageId, 11);

@@ -37,10 +37,13 @@ npm run personal:demo
 # In another terminal, start the simulator
 npm run glasses:simulate
 
-# Open http://127.0.0.1:3003/glasses.html to see the display mirror
+# Or open the display mirror in your browser:
+# http://127.0.0.1:3003/glasses.html
 ```
 
-The simulator loads **glasses.html** from port 3003. **Tap twice on G2 to pair the synthetic demo.** All chat browsing and composing can then be completed using glasses gestures. No phone text box is required. The display mirror at http://127.0.0.1:3003/glasses.html shows what appears on the glasses.
+**To pair:** Tap twice on G2 (simulator) or the mirror page. All chat browsing, reading, and replying can be completed using glasses gestures alone. No phone text box required.
+
+**Controls:** Swipe to navigate, Tap to open/confirm, Double tap to go back, Hold to dictate (when voice is enabled).
 
 ## Real Telegram Account (Optional)
 

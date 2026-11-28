@@ -4,7 +4,7 @@ export default defineConfig({
     target: "es2022",
     rollupOptions: {
       input: {
-        crew: "index.html",
+        // Crew prototype archived (Designer fix #15)
         personal: "personal.html",
         glasses: "glasses.html",
       },

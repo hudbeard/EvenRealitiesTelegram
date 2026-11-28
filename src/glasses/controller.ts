@@ -231,8 +231,7 @@ export class GlassesApp {
       "Double tap again to exit this app.",
       async () => {
         await this.exit();
-      },
-      "info"
+      }
     );
   }
   async openSaved() {
@@ -1240,8 +1239,7 @@ export class GlassesApp {
               async () => {
                 await this.api("/logout", {});
                 location.reload();
-              },
-              "info"
+              }
             );
           },
         },
