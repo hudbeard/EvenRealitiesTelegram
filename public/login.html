@@ -156,6 +156,15 @@
       font-size: 12px;
       color: #888;
     }
+    .link-button {
+      background: none;
+      color: #60a5fa;
+      text-decoration: underline;
+      margin-top: 8px;
+    }
+    .link-button:hover { background: none; color: #93c5fd; }
+    #qr-image img { display: block; width: 240px; height: 240px; }
+    .done-link { display: block; margin-top: 12px; color: #60a5fa; text-align: center; }
     .demo-simulate button {
       margin-top: 8px;
       padding: 8px 16px;
@@ -165,314 +174,273 @@
   </style>
 </head>
 <body>
-  <div class="container">
+  <main class="container">
     <h1>Sign in to Telegram</h1>
-    <p class="subtitle">Connect your account to Fieldline</p>
-    
-    <div class="method-tabs">
-      <button class="method-tab active" data-method="qr">QR Code</button>
-      <button class="method-tab" data-method="phone">Phone Number</button>
+    <p class="subtitle">Connect your account to Fieldline. The session stays on your server.</p>
+
+    <div class="method-tabs" role="tablist">
+      <button type="button" class="method-tab active" data-method="qr" role="tab">QR Code</button>
+      <button type="button" class="method-tab" data-method="phone" role="tab">Phone Number</button>
     </div>
 
-    <!-- QR Code Method -->
-    <div class="method-content active" id="qr-method">
-      <div class="qr-container" id="qr-container">
+    <section id="qr-panel" class="hidden" aria-live="polite">
+      <div class="qr-container">
         <div id="qr-image"></div>
         <div class="qr-instructions">
-          Scan this QR code with Telegram on your phone:<br>
+          Scan with Telegram on your phone:<br>
           Settings → Devices → Link Desktop Device
         </div>
         <div class="countdown" id="qr-countdown"></div>
       </div>
       <div id="qr-demo" class="demo-simulate hidden">
-        <div>Demo Mode: QR will auto-scan in 3 seconds</div>
-        <button onclick="simulateScan()">Or click to simulate scan now</button>
+        <div>Demo mode: the QR scans itself in about 3 seconds.</div>
+        <button type="button" id="simulate-scan">Simulate the scan now</button>
       </div>
-      <div id="qr-2fa" class="hidden">
-        <div class="form-group">
-          <label for="qr-password">Two-Factor Password</label>
-          <input type="password" id="qr-password" placeholder="Enter your 2FA password">
-        </div>
-        <button onclick="submit2FA()">Confirm Password</button>
-      </div>
-    </div>
+    </section>
 
-    <!-- Phone Number Method -->
-    <div class="method-content" id="phone-method">
-      <div id="phone-input-step">
-        <div class="form-group">
-          <label for="phone-number">Phone Number</label>
-          <input type="tel" id="phone-number" placeholder="+1234567890">
-        </div>
-        <button onclick="sendCode()">Send Code</button>
+    <form id="phone-form" class="hidden">
+      <div class="form-group">
+        <label for="phone-number">Phone number with country code</label>
+        <input type="tel" id="phone-number" autocomplete="tel" placeholder="+15551234567">
       </div>
-      <div id="phone-code-step" class="hidden">
-        <div class="form-group">
-          <label for="phone-code">Verification Code</label>
-          <input type="text" id="phone-code" placeholder="12345">
-        </div>
-        <button onclick="verifyCode()">Verify</button>
-      </div>
-      <div id="phone-2fa-step" class="hidden">
-        <div class="form-group">
-          <label for="phone-password">Two-Factor Password</label>
-          <input type="password" id="phone-password" placeholder="Enter your 2FA password">
-        </div>
-        <button onclick="verifyPhone2FA()">Confirm Password</button>
-      </div>
-    </div>
+      <button type="submit">Send code</button>
+    </form>
 
-    <div id="status" class="status hidden"></div>
-  </div>
+    <form id="code-form" class="hidden">
+      <div class="form-group">
+        <label for="phone-code">Code from Telegram</label>
+        <input type="text" id="phone-code" inputmode="numeric" autocomplete="one-time-code" placeholder="12345">
+      </div>
+      <button type="submit">Verify</button>
+    </form>
+
+    <form id="password-form" class="hidden">
+      <div class="form-group">
+        <label for="password">Two-step verification password</label>
+        <input type="password" id="password" autocomplete="current-password">
+        <div class="countdown" id="password-hint"></div>
+      </div>
+      <button type="submit">Confirm password</button>
+    </form>
+
+    <div id="status" class="status hidden" role="status"></div>
+    <a id="done-link" class="done-link hidden" href="/glasses.html">Open the glasses mirror and pair your display</a>
+    <button type="button" id="retry" class="hidden">Try again</button>
+    <button type="button" id="cancel" class="link-button hidden">Cancel sign-in</button>
+  </main>
 
   <script>
-    const apiBase = "";
-    let currentMethod = "qr";
-    let qrSessionId = null;
-    let phoneSessionId = null;
+    const POLL_MS = window.FIELDLINE_LOGIN_POLL_MS ?? 1500;
+    const TERMINAL = ["done", "error", "cancelled"];
+    const $ = (id) => document.getElementById(id);
+    let method = "qr";
+    let attempt = null; // latest LoginView from the server
+    let generation = 0; // bumps on every start/switch; stale polls are ignored
+    let pollTimer, countdownTimer, shownQrVersion = -1;
 
-    function showStatus(message, type) {
-      const status = document.getElementById("status");
-      status.textContent = message;
-      status.className = `status ${type}`;
-      status.classList.remove("hidden");
+    function stopTimers() {
+      clearTimeout(pollTimer);
+      clearInterval(countdownTimer);
+      pollTimer = countdownTimer = undefined;
     }
-
-    function hideStatus() {
-      document.getElementById("status").classList.add("hidden");
-    }
-
-    // Method switching
-    document.querySelectorAll(".method-tab").forEach((tab) => {
-      tab.addEventListener("click", () => {
-        const method = tab.dataset.method;
-        switchMethod(method);
-      });
-    });
-
-    function switchMethod(method) {
-      currentMethod = method;
-      document.querySelectorAll(".method-tab").forEach((t) => {
-        t.classList.toggle("active", t.dataset.method === method);
-      });
-      document.querySelectorAll(".method-content").forEach((c) => {
-        c.classList.toggle("active", c.id === `${method}-method`);
-      });
-      hideStatus();
-      if (method === "qr") {
-        startQRLogin();
-      }
-    }
-
-    async function api(path, body) {
-      const r = await fetch(apiBase + "/api" + path, {
-        method: body === undefined ? "GET" : "POST",
+    async function api(method, path, body) {
+      const r = await fetch("/api" + path, {
+        method,
         headers: body === undefined ? {} : { "content-type": "application/json" },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error ?? "Request failed");
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error ?? "Request failed. Try again.");
       return data;
     }
-
-    // QR Code Login
-    async function startQRLogin() {
-      try {
-        hideStatus();
-        document.getElementById("qr-2fa").classList.add("hidden");
-        
-        const result = await api("/login/qr/start", {});
-        qrSessionId = result.sessionId;
-        
-        // Display QR (server renders it as data URL or SVG)
-        document.getElementById("qr-image").innerHTML = result.qr;
-        
-        // Show countdown
-        if (result.expiresIn) {
-          updateCountdown(result.expiresIn);
+    function status(text, kind) {
+      const el = $("status");
+      el.textContent = text;
+      el.className = "status " + kind;
+      el.classList.toggle("hidden", !text);
+    }
+    function only(...ids) {
+      for (const id of ["qr-panel", "phone-form", "code-form", "password-form", "done-link", "retry", "cancel"])
+        $(id).classList.toggle("hidden", !ids.includes(id));
+    }
+    function showQr(view) {
+      if (view.qr && view.qrVersion !== shownQrVersion) {
+        const img = document.createElement("img");
+        img.alt = "Telegram sign-in QR code";
+        img.width = 240;
+        img.height = 240;
+        img.src = view.qr;
+        $("qr-image").replaceChildren(img);
+        shownQrVersion = view.qrVersion;
+        clearInterval(countdownTimer);
+        const end = Date.now() + (view.expiresIn ?? 0) * 1000;
+        const tick = () => {
+          const left = Math.max(0, Math.round((end - Date.now()) / 1000));
+          $("qr-countdown").textContent = left
+            ? `New code in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`
+            : "Getting a fresh code…";
+        };
+        tick();
+        countdownTimer = setInterval(tick, 1000);
+      }
+      $("qr-demo").classList.toggle("hidden", !view.demo);
+    }
+    function render(view) {
+      attempt = view;
+      const err = view.error?.message ?? "";
+      switch (view.state) {
+        case "idle":
+        case "connecting":
+          only("cancel");
+          status("Connecting to Telegram…", "info");
+          break;
+        case "qr":
+          only("qr-panel", "cancel");
+          showQr(view);
+          status("", "info");
+          break;
+        case "awaiting_code":
+          only("code-form", "cancel");
+          status(err || "Telegram sent you a code.", err ? "error" : "info");
+          break;
+        case "awaiting_password":
+          only("password-form", "cancel");
+          $("password-hint").textContent = view.hint ? "Hint: " + view.hint : "";
+          status(err || "Two-step verification is on.", err ? "error" : "info");
+          break;
+        case "saving":
+          only();
+          status("Signing in…", "info");
+          break;
+        case "done":
+          only("done-link");
+          status(
+            "Signed in as " + (view.user?.name ?? "your account") + ". " +
+              (view.pickedUp ? "Your server is using this account now." : "Saved. Restart the server to use it."),
+            "success",
+          );
+          break;
+        case "cancelled":
+          only("retry");
+          status("Sign-in cancelled.", "info");
+          break;
+        default:
+          only("retry");
+          status(err || "Sign-in failed.", "error");
+      }
+      if (TERMINAL.includes(view.state)) stopTimers();
+      if (view.state !== "qr") clearInterval(countdownTimer);
+    }
+    function poll(gen) {
+      clearTimeout(pollTimer);
+      pollTimer = setTimeout(async () => {
+        if (gen !== generation || !attempt || TERMINAL.includes(attempt.state)) return;
+        try {
+          const view = await api("GET", "/login/" + attempt.id);
+          if (gen !== generation) return;
+          render(view);
+          if (!TERMINAL.includes(view.state)) poll(gen);
+        } catch (e) {
+          if (gen !== generation) return;
+          stopTimers();
+          only("retry");
+          status(e.message, "error");
         }
-        
-        // Show demo controls if in demo mode
-        if (result.demo) {
-          document.getElementById("qr-demo").classList.remove("hidden");
-        } else {
-          document.getElementById("qr-demo").classList.add("hidden");
-        }
-        
-        // Start polling
-        pollQRStatus();
-      } catch (err) {
-        showStatus(err.message, "error");
-      }
+      }, POLL_MS);
     }
-
-    function updateCountdown(expiresIn) {
-      const countdownEl = document.getElementById("qr-countdown");
-      const endTime = Date.now() + expiresIn * 1000;
-      
-      const updateTimer = () => {
-        const remaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
-        if (remaining > 0) {
-          const mins = Math.floor(remaining / 60);
-          const secs = remaining % 60;
-          countdownEl.textContent = `Expires in ${mins}:${secs.toString().padStart(2, "0")}`;
-          setTimeout(updateTimer, 1000);
-        } else {
-          countdownEl.textContent = "QR code expired";
-          setTimeout(startQRLogin, 1000);
-        }
-      };
-      updateTimer();
+    async function cancelCurrent() {
+      const current = attempt;
+      attempt = null;
+      if (current && !TERMINAL.includes(current.state))
+        await api("POST", `/login/${current.id}/cancel`, {}).catch(() => {});
     }
-
-    async function pollQRStatus() {
-      if (!qrSessionId) return;
-      
+    async function begin(kind, phone) {
+      stopTimers();
+      const gen = ++generation;
+      shownQrVersion = -1;
+      $("qr-image").replaceChildren();
+      await cancelCurrent();
+      only("cancel");
+      status("Connecting to Telegram…", "info");
       try {
-        const result = await api("/login/qr/check", { sessionId: qrSessionId });
-        
-        if (result.status === "success") {
-          showStatus(`Signed in as ${result.user.firstName || result.user.username || "user"}`, "success");
-          setTimeout(() => {
-            window.location.href = "/personal.html";
-          }, 1500);
-        } else if (result.status === "password_required") {
-          showStatus("Two-factor authentication required", "info");
-          document.getElementById("qr-2fa").classList.remove("hidden");
-          document.getElementById("qr-password").focus();
-        } else if (result.status === "pending") {
-          setTimeout(pollQRStatus, 2000);
-        } else {
-          showStatus(result.error || "Login failed", "error");
-        }
-      } catch (err) {
-        setTimeout(pollQRStatus, 2000);
+        const view = await api("POST", `/login/${kind}/start`, kind === "phone" ? { phone } : {});
+        if (gen !== generation) return;
+        render(view);
+        if (!TERMINAL.includes(view.state)) poll(gen);
+      } catch (e) {
+        if (gen !== generation) return;
+        only("retry");
+        status(e.message, "error");
       }
     }
-
-    async function submit2FA() {
-      const password = document.getElementById("qr-password").value.trim();
-      if (!password) {
-        showStatus("Please enter your password", "error");
-        return;
-      }
-      
+    async function submit(path, body, form) {
+      if (!attempt) return;
+      const button = form.querySelector("button");
+      button.disabled = true;
+      const gen = generation;
       try {
-        showStatus("Verifying password...", "info");
-        
-        const result = await api("/login/qr/password", { 
-          sessionId: qrSessionId,
-          password 
-        });
-        
-        if (result.status === "success") {
-          showStatus(`Signed in as ${result.user.firstName || result.user.username || "user"}`, "success");
-          setTimeout(() => {
-            window.location.href = "/personal.html";
-          }, 1500);
-        } else {
-          throw new Error(result.error || "Password verification failed");
-        }
-      } catch (err) {
-        showStatus(err.message, "error");
+        const view = await api("POST", `/login/${attempt.id}/${path}`, body);
+        if (gen === generation) render(view);
+      } catch (e) {
+        status(e.message, "error");
+      } finally {
+        button.disabled = false;
       }
     }
+    async function switchMethod(next) {
+      method = next;
+      document.querySelectorAll(".method-tab").forEach((t) => t.classList.toggle("active", t.dataset.method === next));
+      if (next === "qr") return begin("qr");
+      stopTimers();
+      generation++;
+      await cancelCurrent();
+      only("phone-form");
+      status("", "info");
+    }
 
-    // Phone Number Login
-    async function sendCode() {
-      const phone = document.getElementById("phone-number").value.trim();
-      if (!phone) {
-        showStatus("Please enter your phone number", "error");
-        return;
-      }
-      
+    document.querySelectorAll(".method-tab").forEach((tab) => tab.addEventListener("click", () => switchMethod(tab.dataset.method)));
+    $("phone-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const phone = $("phone-number").value.trim();
+      if (!phone) return status("Enter your phone number.", "error");
+      begin("phone", phone);
+    });
+    $("code-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const code = $("phone-code").value.trim();
+      if (!code) return status("Enter the code.", "error");
+      $("phone-code").value = "";
+      submit("code", { code }, e.target);
+    });
+    $("password-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const password = $("password").value;
+      if (!password) return status("Enter your password.", "error");
+      $("password").value = "";
+      submit("password", { password }, e.target);
+    });
+    $("simulate-scan").addEventListener("click", async () => {
+      if (!attempt) return;
       try {
-        showStatus("Sending code...", "info");
-        
-        const result = await api("/login/phone/send-code", { phone });
-        phoneSessionId = result.sessionId;
-        
-        document.getElementById("phone-input-step").classList.add("hidden");
-        document.getElementById("phone-code-step").classList.remove("hidden");
-        showStatus("Code sent! Check your Telegram app", "success");
-        document.getElementById("phone-code").focus();
-      } catch (err) {
-        showStatus(err.message, "error");
+        render(await api("POST", `/login/${attempt.id}/simulate-scan`, {}));
+      } catch (e) {
+        status(e.message, "error");
       }
-    }
-
-    async function verifyCode() {
-      const code = document.getElementById("phone-code").value.trim();
-      if (!code) {
-        showStatus("Please enter the verification code", "error");
-        return;
-      }
-      
+    });
+    $("cancel").addEventListener("click", async () => {
+      const current = attempt;
+      stopTimers();
+      generation++;
+      if (!current) return;
       try {
-        showStatus("Verifying...", "info");
-        
-        const result = await api("/login/phone/verify-code", {
-          sessionId: phoneSessionId,
-          code
-        });
-        
-        if (result.status === "success") {
-          showStatus(`Signed in as ${result.user.firstName || result.user.username || "user"}`, "success");
-          setTimeout(() => {
-            window.location.href = "/personal.html";
-          }, 1500);
-        } else if (result.status === "password_required") {
-          document.getElementById("phone-code-step").classList.add("hidden");
-          document.getElementById("phone-2fa-step").classList.remove("hidden");
-          showStatus("Two-factor authentication required", "info");
-          document.getElementById("phone-password").focus();
-        }
-      } catch (err) {
-        showStatus(err.message, "error");
+        render(await api("POST", `/login/${current.id}/cancel`, {}));
+      } catch (e) {
+        status(e.message, "error");
       }
-    }
-
-    async function verifyPhone2FA() {
-      const password = document.getElementById("phone-password").value.trim();
-      if (!password) {
-        showStatus("Please enter your password", "error");
-        return;
-      }
-      
-      try {
-        showStatus("Verifying password...", "info");
-        
-        const result = await api("/login/phone/password", {
-          sessionId: phoneSessionId,
-          password
-        });
-        
-        if (result.status === "success") {
-          showStatus(`Signed in as ${result.user.firstName || result.user.username || "user"}`, "success");
-          setTimeout(() => {
-            window.location.href = "/personal.html";
-          }, 1500);
-        } else {
-          throw new Error(result.error || "Password verification failed");
-        }
-      } catch (err) {
-        showStatus(err.message, "error");
-      }
-    }
-
-    // Demo mode simulation
-    async function simulateScan() {
-      try {
-        await api("/login/qr/simulate-scan", { sessionId: qrSessionId });
-        showStatus("Scan simulated! Checking...", "info");
-        setTimeout(pollQRStatus, 500);
-      } catch (err) {
-        showStatus(err.message, "error");
-      }
-    }
-
-    // Start with QR method
-    startQRLogin();
+    });
+    $("retry").addEventListener("click", () => (method === "qr" ? begin("qr") : switchMethod("phone")));
+    window.addEventListener("pagehide", stopTimers);
+    begin("qr");
   </script>
 </body>
 </html>
