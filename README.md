@@ -36,14 +36,29 @@ npm run personal:demo
 
 # In another terminal, start the simulator
 npm run glasses:simulate
-
-# Or open the display mirror in your browser:
-# http://127.0.0.1:3003/glasses.html
 ```
 
-**To pair:** Tap twice on G2 (simulator) or the mirror page. All chat browsing, reading, and replying can be completed using glasses gestures alone. No phone text box required.
+**Sign in (demo mode):** Open http://127.0.0.1:3003/login — QR code auto-scans after 3 seconds, or click "simulate scan now"
+
+**To pair glasses:** Tap twice on simulator. The pairing code expires in 5:00 — double-tap to cancel.
+
+**Display mirror:** http://127.0.0.1:3003/glasses.html shows what appears on the glasses.
 
 **Controls:** Swipe to navigate, Tap to open/confirm, Double tap to go back, Hold to dictate (when voice is enabled).
+
+---
+
+## Real Telegram Account Setup
+
+For production use with your real Telegram account:
+
+1. Get API credentials from https://my.telegram.org
+2. Set in `.env`: `TELEGRAM_API_ID` and `TELEGRAM_API_HASH`
+3. Open http://127.0.0.1:3003/login
+4. Choose **QR Code** (scan with Telegram mobile) or **Phone Number** (SMS code)
+5. Enter 2FA password if prompted
+6. Start server: `npm run personal:server`
+7. Pair glasses as above
 
 ## Real Telegram Account (Optional)
 

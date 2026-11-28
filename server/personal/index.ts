@@ -9,7 +9,15 @@ import { DemoPersonal } from "./demo.js";
 import { AccountTelegram } from "./mtproto.js";
 import { transcribe } from "./speech.js";
 import { suggestReplies } from "./reply-suggestions.js";
-import { generateQRToken, checkQRLogin, saveSession } from "./qr-login.js";
+import {
+  startQRLogin,
+  checkQRLogin,
+  submitQRPassword,
+  simulateQRScan,
+  startPhoneLogin,
+  verifyPhoneCode,
+  verifyPhonePassword,
+} from "./login.js";
 const demo = process.argv.includes("--demo"),
   port = Number(process.env.PERSONAL_PORT ?? 3003),
   origin = process.env.PERSONAL_ORIGIN ?? `http://127.0.0.1:${port}`;
@@ -32,6 +40,85 @@ const approval = await readFile(keyPath, "utf8");
 const app = express();
 app.disable("x-powered-by");
 app.use(express.json({ limit: "16kb" }));
+// Serve login page
+app.get("/login", (_req, res) => {
+  res.sendFile(resolve("public/login.html"));
+});
+
+// Login endpoints (no auth required)
+const apiId = Number(process.env.TELEGRAM_API_ID ?? 0);
+const apiHash = process.env.TELEGRAM_API_HASH ?? "";
+const sessionFile = process.env.TELEGRAM_SESSION_FILE ?? ".data/personal.session";
+
+app.post("/api/login/qr/start", async (_req, res) => {
+  try {
+    const result = await startQRLogin(apiId, apiHash, demo);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/login/qr/check", async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    const result = await checkQRLogin(sessionId, demo);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/login/qr/password", async (req, res) => {
+  try {
+    const { sessionId, password } = req.body;
+    const result = await submitQRPassword(sessionId, password, sessionFile, demo);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/login/qr/simulate-scan", async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    await simulateQRScan(sessionId);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/login/phone/send-code", async (req, res) => {
+  try {
+    const { phone } = req.body;
+    const result = await startPhoneLogin(apiId, apiHash, phone, demo);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/login/phone/verify-code", async (req, res) => {
+  try {
+    const { sessionId, code } = req.body;
+    const result = await verifyPhoneCode(sessionId, code, demo);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/login/phone/password", async (req, res) => {
+  try {
+    const { sessionId, password } = req.body;
+    const result = await verifyPhonePassword(sessionId, password, sessionFile, demo);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.use("/api", (req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("X-Content-Type-Options", "nosniff");
@@ -90,65 +177,7 @@ app.get("/api/health", (_req, res) =>
   }),
 );
 
-// QR Login endpoints (only available when not in demo mode)
-let qrToken: { token: Buffer; expires: number } | null = null;
-let qrPollInterval: NodeJS.Timeout | undefined;
-
-app.post("/api/qr-login/start", async (_req, res) => {
-  if (demo) throw new Problem(503, "QR login not available in demo mode.");
-  
-  const apiId = Number(process.env.TELEGRAM_API_ID);
-  const apiHash = process.env.TELEGRAM_API_HASH;
-  
-  if (!Number.isInteger(apiId) || apiId <= 0 || !apiHash)
-    throw new Problem(503, "Telegram API credentials not configured.");
-  
-  try {
-    qrToken = await generateQRToken(apiId, apiHash);
-    const tokenBase64 = qrToken.token.toString("base64url");
-    const qrData = `tg://login?token=${tokenBase64}`;
-    
-    res.json({
-      qrData,
-      expires: qrToken.expires,
-      expiresIn: Math.max(0, qrToken.expires - Math.floor(Date.now() / 1000)),
-    });
-  } catch (err: any) {
-    throw new Problem(503, err.message || "Failed to generate QR code.");
-  }
-});
-
-app.get("/api/qr-login/check", async (_req, res) => {
-  if (demo) throw new Problem(503, "QR login not available in demo mode.");
-  if (!qrToken) throw new Problem(400, "No QR login session started.");
-  
-  const apiId = Number(process.env.TELEGRAM_API_ID);
-  const apiHash = process.env.TELEGRAM_API_HASH;
-  
-  if (!Number.isInteger(apiId) || apiId <= 0 || !apiHash)
-    throw new Problem(503, "Telegram API credentials not configured.");
-  
-  try {
-    const result = await checkQRLogin(apiId, apiHash, qrToken.token);
-    
-    if (result.success && result.session) {
-      // Save the session
-      const sessionFile = process.env.TELEGRAM_SESSION_FILE ?? ".data/personal.session";
-      await saveSession(result.session, sessionFile);
-      qrToken = null;
-      
-      res.json({ success: true, message: "QR login successful!" });
-    } else if (result.error) {
-      qrToken = null;
-      res.json({ success: false, error: result.error });
-    } else {
-      res.json({ success: false, pending: true });
-    }
-  } catch (err: any) {
-    qrToken = null;
-    throw new Problem(503, err.message || "Failed to check QR login status.");
-  }
-});
+// Protected API endpoints (require display token)
 app.use("/api", (req, res, next) => {
   const token = req.headers.authorization?.replace(/^Bearer /, "") ?? "";
   if (!store.authorize(token))

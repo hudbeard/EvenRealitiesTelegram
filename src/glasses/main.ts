@@ -191,23 +191,59 @@ async function input(event: Input, nativeIndex?: number) {
     return;
   }
   if (!token) {
+    if (event === "back" && pairId) {
+      // Cancel pairing (Designer fix #10)
+      pairId = "";
+      pairCode = "";
+      clearTimeout(pairTimer);
+      render({
+        title: "TELEGRAM / FIELDLINE",
+        body: "Your Telegram, on G2.\n\nChats · messages · replies\nReactions · Saved Messages\n\nTap to connect this display.",
+        footer: "Tap: connect · Phone: setup only",
+        icon: "telegram",
+      });
+      return;
+    }
     if (event !== "tap") return;
     if (!pairId) {
       const p = await api("/pair", {});
       pairId = p.id;
       pairCode = p.code;
-      render({
-        title: synthetic ? "CONNECT SYNTHETIC DEMO" : "PAIR THIS DISPLAY",
-        body:
-          "Pairing code: " +
-          pairCode +
-          "\n\n" +
-          (synthetic
-            ? "Tap again to enter the demo."
-            : "Approve this code from your server.\nPhone is only needed for setup."),
-        footer: synthetic ? "Tap: approve demo" : "Waiting for owner approval…",
-        icon: "glasses",
-      });
+      const expiresAt = p.expiresAt;
+      
+      // Show pairing with countdown (Designer fix #10)
+      const updatePairingCountdown = () => {
+        const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+        if (remaining > 0 && pairId === p.id) {
+          const mins = Math.floor(remaining / 60);
+          const secs = remaining % 60;
+          render({
+            title: synthetic ? "CONNECT SYNTHETIC DEMO" : "PAIR THIS DISPLAY",
+            body:
+              "Pairing code: " +
+              pairCode +
+              "\n\n" +
+              (synthetic
+                ? "Tap again to enter the demo."
+                : "Approve this code from your server.\nPhone is only needed for setup."),
+            footer: synthetic
+              ? "Tap: approve · Double tap: cancel"
+              : `Expires in ${mins}:${secs.toString().padStart(2, "0")} · Double tap: cancel`,
+            icon: "glasses",
+          });
+          pairTimer = setTimeout(updatePairingCountdown, 1000);
+        } else if (pairId === p.id) {
+          pairId = "";
+          pairCode = "";
+          render({
+            title: "PAIRING EXPIRED",
+            body: "The pairing code expired.\n\nTap to generate a new code.",
+            footer: "Tap: try again",
+            icon: "glasses",
+          });
+        }
+      };
+      updatePairingCountdown();
       safe(pollPair);
     } else if (synthetic) {
       await api("/pair/approve", { code: pairCode });

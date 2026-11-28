@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fieldline · Sign In</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0a0a0a;
+      color: #e8e8e8;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      max-width: 420px;
+      width: 100%;
+      background: #1a1a1a;
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+    h1 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #fff;
+    }
+    .subtitle {
+      color: #888;
+      font-size: 14px;
+      margin-bottom: 24px;
+    }
+    .method-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid #333;
+    }
+    .method-tab {
+      padding: 12px 20px;
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+    .method-tab:hover { color: #fff; }
+    .method-tab.active {
+      color: #fff;
+      border-bottom-color: #0088cc;
+    }
+    .method-content {
+      display: none;
+    }
+    .method-content.active {
+      display: block;
+    }
+    .qr-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      padding: 24px;
+      background: #fff;
+      border-radius: 12px;
+      margin-bottom: 16px;
+    }
+    .qr-instructions {
+      text-align: center;
+      color: #666;
+      font-size: 14px;
+      margin-top: 8px;
+    }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: #aaa;
+      margin-bottom: 6px;
+    }
+    input {
+      width: 100%;
+      padding: 12px;
+      background: #0a0a0a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+    }
+    input:focus {
+      outline: none;
+      border-color: #0088cc;
+    }
+    button {
+      width: 100%;
+      padding: 12px;
+      background: #0088cc;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover { background: #0077bb; }
+    button:disabled {
+      background: #333;
+      color: #666;
+      cursor: not-allowed;
+    }
+    .status {
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      margin-top: 16px;
+      text-align: center;
+    }
+    .status.success {
+      background: #0d4d20;
+      color: #4ade80;
+    }
+    .status.error {
+      background: #4d0d0d;
+      color: #f87171;
+    }
+    .status.info {
+      background: #0d2b4d;
+      color: #60a5fa;
+    }
+    .hidden { display: none !important; }
+    .countdown {
+      font-size: 12px;
+      color: #888;
+      margin-top: 8px;
+      text-align: center;
+    }
+    .demo-simulate {
+      margin-top: 12px;
+      background: #2a2a2a;
+      padding: 8px;
+      border-radius: 6px;
+      text-align: center;
+      font-size: 12px;
+      color: #888;
+    }
+    .demo-simulate button {
+      margin-top: 8px;
+      padding: 8px 16px;
+      font-size: 12px;
+      background: #0d4d20;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Sign in to Telegram</h1>
+    <p class="subtitle">Connect your account to Fieldline</p>
+    
+    <div class="method-tabs">
+      <button class="method-tab active" data-method="qr">QR Code</button>
+      <button class="method-tab" data-method="phone">Phone Number</button>
+    </div>
+
+    <!-- QR Code Method -->
+    <div class="method-content active" id="qr-method">
+      <div class="qr-container" id="qr-container">
+        <div id="qr-image"></div>
+        <div class="qr-instructions">
+          Scan this QR code with Telegram on your phone:<br>
+          Settings → Devices → Link Desktop Device
+        </div>
+        <div class="countdown" id="qr-countdown"></div>
+      </div>
+      <div id="qr-demo" class="demo-simulate hidden">
+        <div>Demo Mode: QR will auto-scan in 3 seconds</div>
+        <button onclick="simulateScan()">Or click to simulate scan now</button>
+      </div>
+      <div id="qr-2fa" class="hidden">
+        <div class="form-group">
+          <label for="qr-password">Two-Factor Password</label>
+          <input type="password" id="qr-password" placeholder="Enter your 2FA password">
+        </div>
+        <button onclick="submit2FA()">Confirm Password</button>
+      </div>
+    </div>
+
+    <!-- Phone Number Method -->
+    <div class="method-content" id="phone-method">
+      <div id="phone-input-step">
+        <div class="form-group">
+          <label for="phone-number">Phone Number</label>
+          <input type="tel" id="phone-number" placeholder="+1234567890">
+        </div>
+        <button onclick="sendCode()">Send Code</button>
+      </div>
+      <div id="phone-code-step" class="hidden">
+        <div class="form-group">
+          <label for="phone-code">Verification Code</label>
+          <input type="text" id="phone-code" placeholder="12345">
+        </div>
+        <button onclick="verifyCode()">Verify</button>
+      </div>
+      <div id="phone-2fa-step" class="hidden">
+        <div class="form-group">
+          <label for="phone-password">Two-Factor Password</label>
+          <input type="password" id="phone-password" placeholder="Enter your 2FA password">
+        </div>
+        <button onclick="verifyPhone2FA()">Confirm Password</button>
+      </div>
+    </div>
+
+    <div id="status" class="status hidden"></div>
+  </div>
+
+  <script>
+    const apiBase = "";
+    let currentMethod = "qr";
+    let qrSessionId = null;
+    let phoneSessionId = null;
+
+    function showStatus(message, type) {
+      const status = document.getElementById("status");
+      status.textContent = message;
+      status.className = `status ${type}`;
+      status.classList.remove("hidden");
+    }
+
+    function hideStatus() {
+      document.getElementById("status").classList.add("hidden");
+    }
+
+    // Method switching
+    document.querySelectorAll(".method-tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        const method = tab.dataset.method;
+        switchMethod(method);
+      });
+    });
+
+    function switchMethod(method) {
+      currentMethod = method;
+      document.querySelectorAll(".method-tab").forEach((t) => {
+        t.classList.toggle("active", t.dataset.method === method);
+      });
+      document.querySelectorAll(".method-content").forEach((c) => {
+        c.classList.toggle("active", c.id === `${method}-method`);
+      });
+      hideStatus();
+      if (method === "qr") {
+        startQRLogin();
+      }
+    }
+
+    async function api(path, body) {
+      const r = await fetch(apiBase + "/api" + path, {
+        method: body === undefined ? "GET" : "POST",
+        headers: body === undefined ? {} : { "content-type": "application/json" },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? "Request failed");
+      return data;
+    }
+
+    // QR Code Login
+    async function startQRLogin() {
+      try {
+        hideStatus();
+        document.getElementById("qr-2fa").classList.add("hidden");
+        
+        const result = await api("/login/qr/start", {});
+        qrSessionId = result.sessionId;
+        
+        // Display QR (server renders it as data URL or SVG)
+        document.getElementById("qr-image").innerHTML = result.qr;
+        
+        // Show countdown
+        if (result.expiresIn) {
+          updateCountdown(result.expiresIn);
+        }
+        
+        // Show demo controls if in demo mode
+        if (result.demo) {
+          document.getElementById("qr-demo").classList.remove("hidden");
+        } else {
+          document.getElementById("qr-demo").classList.add("hidden");
+        }
+        
+        // Start polling
+        pollQRStatus();
+      } catch (err) {
+        showStatus(err.message, "error");
+      }
+    }
+
+    function updateCountdown(expiresIn) {
+      const countdownEl = document.getElementById("qr-countdown");
+      const endTime = Date.now() + expiresIn * 1000;
+      
+      const updateTimer = () => {
+        const remaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
+        if (remaining > 0) {
+          const mins = Math.floor(remaining / 60);
+          const secs = remaining % 60;
+          countdownEl.textContent = `Expires in ${mins}:${secs.toString().padStart(2, "0")}`;
+          setTimeout(updateTimer, 1000);
+        } else {
+          countdownEl.textContent = "QR code expired";
+          setTimeout(startQRLogin, 1000);
+        }
+      };
+      updateTimer();
+    }
+
+    async function pollQRStatus() {
+      if (!qrSessionId) return;
+      
+      try {
+        const result = await api("/login/qr/check", { sessionId: qrSessionId });
+        
+        if (result.status === "success") {
+          showStatus(`Signed in as ${result.user.firstName || result.user.username || "user"}`, "success");
+          setTimeout(() => {
+            window.location.href = "/personal.html";
+          }, 1500);
+        } else if (result.status === "password_required") {
+          showStatus("Two-factor authentication required", "info");
+          document.getElementById("qr-2fa").classList.remove("hidden");
+          document.getElementById("qr-password").focus();
+        } else if (result.status === "pending") {
+          setTimeout(pollQRStatus, 2000);
+        } else {
+          showStatus(result.error || "Login failed", "error");
+        }
+      } catch (err) {
+        setTimeout(pollQRStatus, 2000);
+      }
+    }
+
+    async function submit2FA() {
+      const password = document.getElementById("qr-password").value.trim();
+      if (!password) {
+        showStatus("Please enter your password", "error");
+        return;
+      }
+      
+      try {
+        showStatus("Verifying password...", "info");
+        
+        const result = await api("/login/qr/password", { 
+          sessionId: qrSessionId,
+          password 
+        });
+        
+        if (result.status === "success") {
+          showStatus(`Signed in as ${result.user.firstName || result.user.username || "user"}`, "success");
+          setTimeout(() => {
+            window.location.href = "/personal.html";
+          }, 1500);
+        } else {
+          throw new Error(result.error || "Password verification failed");
+        }
+      } catch (err) {
+        showStatus(err.message, "error");
+      }
+    }
+
+    // Phone Number Login
+    async function sendCode() {
+      const phone = document.getElementById("phone-number").value.trim();
+      if (!phone) {
+        showStatus("Please enter your phone number", "error");
+        return;
+      }
+      
+      try {
+        showStatus("Sending code...", "info");
+        
+        const result = await api("/login/phone/send-code", { phone });
+        phoneSessionId = result.sessionId;
+        
+        document.getElementById("phone-input-step").classList.add("hidden");
+        document.getElementById("phone-code-step").classList.remove("hidden");
+        showStatus("Code sent! Check your Telegram app", "success");
+        document.getElementById("phone-code").focus();
+      } catch (err) {
+        showStatus(err.message, "error");
+      }
+    }
+
+    async function verifyCode() {
+      const code = document.getElementById("phone-code").value.trim();
+      if (!code) {
+        showStatus("Please enter the verification code", "error");
+        return;
+      }
+      
+      try {
+        showStatus("Verifying...", "info");
+        
+        const result = await api("/login/phone/verify-code", {
+          sessionId: phoneSessionId,
+          code
+        });
+        
+        if (result.status === "success") {
+          showStatus(`Signed in as ${result.user.firstName || result.user.username || "user"}`, "success");
+          setTimeout(() => {
+            window.location.href = "/personal.html";
+          }, 1500);
+        } else if (result.status === "password_required") {
+          document.getElementById("phone-code-step").classList.add("hidden");
+          document.getElementById("phone-2fa-step").classList.remove("hidden");
+          showStatus("Two-factor authentication required", "info");
+          document.getElementById("phone-password").focus();
+        }
+      } catch (err) {
+        showStatus(err.message, "error");
+      }
+    }
+
+    async function verifyPhone2FA() {
+      const password = document.getElementById("phone-password").value.trim();
+      if (!password) {
+        showStatus("Please enter your password", "error");
+        return;
+      }
+      
+      try {
+        showStatus("Verifying password...", "info");
+        
+        const result = await api("/login/phone/password", {
+          sessionId: phoneSessionId,
+          password
+        });
+        
+        if (result.status === "success") {
+          showStatus(`Signed in as ${result.user.firstName || result.user.username || "user"}`, "success");
+          setTimeout(() => {
+            window.location.href = "/personal.html";
+          }, 1500);
+        } else {
+          throw new Error(result.error || "Password verification failed");
+        }
+      } catch (err) {
+        showStatus(err.message, "error");
+      }
+    }
+
+    // Demo mode simulation
+    async function simulateScan() {
+      try {
+        await api("/login/qr/simulate-scan", { sessionId: qrSessionId });
+        showStatus("Scan simulated! Checking...", "info");
+        setTimeout(pollQRStatus, 500);
+      } catch (err) {
+        showStatus(err.message, "error");
+      }
+    }
+
+    // Start with QR method
+    startQRLogin();
+  </script>
+</body>
+</html>
