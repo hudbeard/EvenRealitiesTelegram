@@ -19,32 +19,60 @@ A glasses-first personal Telegram client for Even Realities G2 and the R1 ring. 
 
 Swipe to select, tap to open, and double tap to go back. Tap then hold for Even Hub shortcuts such as New message, Find in chat, and Next unread chat. Hold on a message to dictate. Model-backed suggestions are optional and fall back to built-in replies. Double tap at the Telegram home screen to open the system exit confirmation. The G2 display uses separate context and preview areas, brightness for focus, and native pickers for reactions and characters.
 
-## Run the standalone app
+## Quickstart — Demo Mode (No Telegram Account Required)
 
-Node 24.18+ is required for built-in SQLite. Windows is the verified simulator platform.
+Node 24.18+ is required for built-in SQLite. This demo runs entirely with synthetic data:
 
-```powershell
+```bash
+# Install dependencies
 npm ci
 npm ci --prefix .tooling
+
+# Build the app
 npm run build
+
+# Start the demo server (synthetic Telegram data)
 npm run personal:demo
-# In another terminal:
+
+# In another terminal, start the simulator
 npm run glasses:simulate
+
+# Open http://127.0.0.1:3003/glasses.html to see the display mirror
 ```
 
-The simulator loads **glasses.html** from port 3003. Tap twice on G2 to pair the synthetic demo. All chat browsing and composing can then be completed using glasses gestures. No phone text box is required. An optional display mirror is available at http://127.0.0.1:3003/glasses.html; /personal.html is the secondary companion workspace.
+The simulator loads **glasses.html** from port 3003. **Tap twice on G2 to pair the synthetic demo.** All chat browsing and composing can then be completed using glasses gestures. No phone text box is required. The display mirror at http://127.0.0.1:3003/glasses.html shows what appears on the glasses.
 
-For real personal-account access, obtain your own Telegram API credentials, copy .env.example to .env if needed, set TELEGRAM_API_ID and TELEGRAM_API_HASH, then run:
+## Real Telegram Account (Optional)
 
-```powershell
-npm run personal:login    # owner enters phone/code/2FA locally
-npm run personal:server
-npm run glasses:simulate
-# Approve the code shown on G2, once:
-npm run personal:approve -- CODE
-```
+For real personal-account access:
 
-The account session stays in the ignored .data/personal.session. Do not share it or your credentials. A bot token is not used by this client. Login and real Telegram writes have not been tested with owner credentials yet.
+1. **Get Telegram API credentials** from https://my.telegram.org
+2. Copy `.env.example` to `.env` and set:
+   - `TELEGRAM_API_ID` (your API ID)
+   - `TELEGRAM_API_HASH` (your API hash)
+
+3. **Sign in with QR Code (Recommended — Zero Typing!):**
+   ```bash
+   npm run personal:qr-login  # Displays QR code
+   # Scan in Telegram app: Settings → Devices → Link Desktop Device
+   
+   # Once logged in, start the server:
+   npm run personal:server
+   npm run glasses:simulate
+   
+   # Approve the pairing code shown on G2:
+   npm run personal:approve -- CODE
+   ```
+
+4. **Or sign in with Phone/Code:**
+   ```bash
+   npm run personal:login    # Interactive: phone, code, 2FA if enabled
+   npm run personal:server
+   npm run glasses:simulate
+   npm run personal:approve -- CODE
+   ```
+
+**Security:** The session is saved to `.data/personal.session` (gitignored). Never commit this file or share your credentials.
 
 ## Dictation and reply ideas
 

@@ -15,6 +15,7 @@
     "personal:demo": "tsx server/personal/index.ts --demo",
     "personal:server": "tsx server/personal/index.ts",
     "personal:login": "tsx scripts/personal-login.ts",
+    "personal:qr-login": "tsx scripts/qr-login.ts",
     "personal:approve": "node scripts/personal-approve.mjs",
     "personal:simulate": "node .tooling/node_modules/@evenrealities/evenhub-simulator/bin/index.js http://127.0.0.1:3003/personal.html --automation-port 9899",
     "personal:test": "node scripts/personal-smoke.mjs",
