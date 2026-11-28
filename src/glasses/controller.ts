@@ -131,6 +131,8 @@ export class GlassesApp {
   private searchOrigin?: number;
   private chatSearchOrigin?: string;
   private readThrough = new Map<string, number>();
+  /** Read acknowledgements run one at a time, in the order messages were seen. */
+  private ackChain: Promise<void> = Promise.resolve();
   inputPurpose: "compose" | "chats" | "messages" = "compose";
   pending?: PersonalAction;
   operationId = "";
@@ -501,6 +503,19 @@ export class GlassesApp {
           : "   Tap+hold  Menu"),
       shortcuts: this.threadShortcuts(m, lines.length <= 5),
     });
+    // Seen = fully painted on the normal 5-line path. Search results and
+    // long messages (which need Read) are not marked read by a swipe.
+    if (lines.length <= 5 && !this.query) void this.queueAck(m);
+  }
+  /** Queue a best-effort read acknowledgement after any earlier ones. */
+  queueAck(message: Source) {
+    const run = this.ackChain.then(() => this.acknowledge(message));
+    this.ackChain = run;
+    return run;
+  }
+  /** Resolves once every queued read acknowledgement has finished. */
+  settled() {
+    return this.ackChain;
   }
   messageLines(message: Source) {
     return wrap(
@@ -540,7 +555,7 @@ export class GlassesApp {
       const source = this.messages[this.messageIndex];
       this.setComposeTarget(source);
       if (source && this.messageLines(source).length <= 5)
-        void this.acknowledge(source);
+        void this.queueAck(source);
     } else if (this.mode === "quick") {
       this.setComposeTarget(this.quick!.source);
     } else {
@@ -690,35 +705,41 @@ export class GlassesApp {
     });
   }
   async acknowledge(message: Source) {
-    const chat = this.chat!;
-    if (
-      message.outgoing ||
-      message.id <= Math.max(chat.readMaxId, this.readThrough.get(chat.id) ?? 0)
-    )
-      return;
+    const id = message.chatId;
+    const chat =
+      this.chat?.id === id ? this.chat : this.chats.find((c) => c.id === id);
+    const through = Math.max(chat?.readMaxId ?? 0, this.readThrough.get(id) ?? 0);
+    if (message.outgoing || message.id <= through) return;
     try {
-      await this.api(
-        "/glasses/chats/" + encodeURIComponent(message.chatId) + "/read",
-        { messageId: message.id },
-      );
-      const row = this.chats.find((item) => item.id === chat.id);
+      await this.api("/glasses/chats/" + encodeURIComponent(id) + "/read", {
+        messageId: message.id,
+      });
+      const row = this.chats.find((item) => item.id === id);
       if (row) {
         const previous = Math.max(
           row.readMaxId,
-          chat.readMaxId,
-          this.readThrough.get(chat.id) ?? 0,
+          through,
+          this.readThrough.get(id) ?? 0,
         );
-        row.unread = Math.max(
-          0,
-          row.unread -
-            this.messages.filter(
-              (item) =>
-                !item.outgoing && item.id > previous && item.id <= message.id,
-            ).length,
-        );
-        row.readMaxId = message.id;
+        if (message.id > previous) {
+          row.unread = Math.max(
+            0,
+            row.unread -
+              this.messages.filter(
+                (item) =>
+                  item.chatId === id &&
+                  !item.outgoing &&
+                  item.id > previous &&
+                  item.id <= message.id,
+              ).length,
+          );
+          row.readMaxId = message.id;
+        }
       }
-      this.readThrough.set(chat.id, message.id);
+      this.readThrough.set(
+        id,
+        Math.max(this.readThrough.get(id) ?? 0, message.id),
+      );
     } catch {
       // Read acknowledgements are best-effort; the user can still act on the source.
     }
@@ -734,7 +755,7 @@ export class GlassesApp {
         throw new Error("Refresh this chat and try again.");
     }
     this.messageActions(message, back);
-    await this.acknowledge(message);
+    await this.queueAck(message);
   }
   async readMessage(message = this.messages[this.messageIndex]) {
     if (!message) return;
@@ -743,7 +764,7 @@ export class GlassesApp {
       if (channel) this.messageActions(message);
       else if (!message.revision) await this.openMessageActions(message);
       else await this.quickReply(message);
-      void this.acknowledge(message);
+      void this.queueAck(message);
     };
     if (this.messageLines(message).length <= 5) return next();
     this.read(
