@@ -9,10 +9,21 @@ import { loginRoutes } from "../server/personal/login-routes.js";
 import { FakeTimers } from "./helpers/fake-timers.js";
 import { FakeTelegram } from "./helpers/fake-telegram.js";
 
-async function serve(manager: LoginManager, routeOptions: Parameters<typeof loginRoutes>[1] = {}) {
+async function serve(
+  manager: LoginManager,
+  routeOptions: Parameters<typeof loginRoutes>[1] = {},
+  health: { synthetic?: boolean } = {},
+) {
   const app = express();
   app.use(express.json());
   app.get("/login", (_req, res) => res.sendFile(resolve("public/login.html")));
+  app.get("/api/health", (_req, res) =>
+    res.json({
+      ok: true,
+      mode: health.synthetic ? "personal-demo" : "personal",
+      synthetic: !!health.synthetic,
+    }),
+  );
   app.use("/api", loginRoutes(manager, routeOptions));
   const server = app.listen(0, "127.0.0.1");
   await new Promise((r) => server.once("listening", r));
@@ -217,7 +228,7 @@ test("login page (jsdom, demo server): QR is an <img> data URL and the flow reac
       throw new Error("demo must not hand off");
     },
   });
-  const s = await serve(manager);
+  const s = await serve(manager, {}, { synthetic: true });
   const dom = await JSDOM.fromURL(s.base + "/login", {
     runScripts: "dangerously",
     beforeParse(window) {
@@ -235,6 +246,10 @@ test("login page (jsdom, demo server): QR is an <img> data URL and the flow reac
     }
   };
   try {
+    await waitFor(() =>
+      /Demo mode, no Telegram connection/.test(doc.getElementById("status")?.textContent ?? ""),
+    );
+    assert.doesNotMatch(doc.getElementById("status")!.textContent ?? "", /Connecting to Telegram/);
     await waitFor(() => !!doc.querySelector("#qr-image img"));
     const img = doc.querySelector("#qr-image img") as HTMLImageElement;
     assert.equal(img.tagName, "IMG");
@@ -261,7 +276,7 @@ test("login page (jsdom, demo server): phone path with a wrong code re-prompts, 
     persist: async () => {},
     onAuthorized: async () => {},
   });
-  const s = await serve(manager);
+  const s = await serve(manager, {}, { synthetic: true });
   const dom = await JSDOM.fromURL(s.base + "/login", {
     runScripts: "dangerously",
     beforeParse(window) {
