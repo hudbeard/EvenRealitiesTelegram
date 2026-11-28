@@ -1,7 +1,7 @@
 # Fieldline demo walkthrough
 
 **Branch:** `cursor/hackathon-polish-9492`
-**Tests:** 48/48 passing (`npm test`)
+**Tests:** 56/56 passing (`npm test`)
 **What was verified for this document:** build and tests; the demo server's `/api/login/*` flow with `curl`; the login page in jsdom against the demo server. The simulator, a real browser and G2 hardware were **not** re-run at this commit. Glasses steps below describe the behaviour in code and unit tests.
 
 ## Setup
@@ -50,7 +50,7 @@ The sign-in state machine is covered by unit tests with a mocked Telegram client
 ## Tests
 
 ```bash
-npm test   # 48 tests
+npm test   # 56 tests
 ```
 
 - 20 existing controller, service, adapter and voice tests

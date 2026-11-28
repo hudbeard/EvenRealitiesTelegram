@@ -2,7 +2,9 @@
 
 A glasses-first personal Telegram client for Even Realities G2 and the R1 ring. Browse conversations, read message threads, compose, review, send, react, and save messages on the glasses. The phone hosts Even Hub and handles setup; your server maintains the Telegram session and serves the API.
 
-![Actual G2 home framebuffer](docs/media/glasses-home.png)
+Not affiliated with Telegram or Even Realities.
+
+![Simulator home framebuffer](docs/media/glasses-home.png)
 
 [88-second glasses-first simulator walkthrough](docs/media/fieldline-glasses-demo.mp4) · [Inbox preview](docs/media/glasses-inbox.png) · [Reply review](docs/media/glasses-review.png) · [Server setup](docs/standalone.md)
 
@@ -39,6 +41,8 @@ npm run glasses:simulate
 ```
 
 **Sign in (demo mode):** open http://127.0.0.1:3003/login. The demo QR "scans" itself after about 3 seconds, or click "Simulate the scan now". The page ends at "Signed in as Demo User". The phone tab accepts any number and any code except `00000` (which shows the wrong-code path). Demo mode makes no Telegram calls and never writes a session file.
+
+**Warning:** `/login` has no owner authentication. Keep this server on localhost and never host it on a public network.
 
 **To pair glasses:** Tap on the simulator for a 6-digit code (it counts down from 5:00; Double tap cancels), then Tap again to approve the demo.
 
@@ -94,7 +98,7 @@ npm run server:build
 npm run glasses:test
 ```
 
-56 automated tests (`npm test`) cover the sign-in state machine with a mocked Telegram (QR refresh, 2FA and wrong-code retries, cancel, timeouts, atomic save, hot pick-up, rate limits including status polls and page reloads), the login page in jsdom against the demo server, source revision binding, single dispatch, ambiguous delivery, account-wide access boundaries, exact new-message text, Saved Messages, read state, speech formatting, review pagination and cancellation, Disconnect landing on Welcome, and the idle-display health poll. The glasses smoke test drives official SDK gestures and captures actual 576×288 framebuffers. Tester ran `npm run glasses:test` on Even Hub simulator 0.9.5 at 29699a3 and recorded a PASS: "11 framebuffers, blank gesture capture, two-tap exact reply, cancellation, inline receipt, native shortcuts, save and reaction." It ran twice, including with default ports from a fresh clone. This Coder pass did not re-run the simulator. No real Telegram messages are sent by these tests.
+56 automated tests (`npm test`) cover the sign-in state machine with a mocked Telegram (QR refresh, 2FA and wrong-code retries, cancel, timeouts, atomic save, hot pick-up, rate limits including status polls and page reloads), the login page in jsdom against the demo server, source revision binding, single dispatch, ambiguous delivery, account-wide access boundaries, exact new-message text, Saved Messages, read state, speech formatting, review pagination and cancellation, Disconnect landing on Welcome, and the idle-display health poll. The glasses smoke test drives official SDK gestures and captures 576×288 simulator framebuffers. Tester and QA ran `npm run glasses:test` on Even Hub simulator 0.9.5 on `cursor/hackathon-polish-9492` (pushed commit `a9070b2`, same tree as `b34eed6`) and recorded a PASS: "11 framebuffers, blank gesture capture, two-tap exact reply, cancellation, inline receipt, native shortcuts, save and reaction." QA's fresh-clone run at `b34eed6` also passed. This Coder pass did not re-run the simulator. No real Telegram messages are sent by these tests.
 
 [Glasses-first verification and setup](docs/standalone.md) · [Submission draft](docs/submission-draft.md) · [Earlier personal prototype](docs/personal-account.md) · [Original bot prototype](docs/crew-prototype.md)
 

@@ -49,6 +49,6 @@ Configure a Whisper-compatible multipart endpoint through STT_API_URL, STT_API_K
 
 ## Verified November 24
 
-28 tests and both builds passed at that time (the current branch has 48 tests). The official simulator verifies direct inbox entry, blank gesture capture, two-tap reply confirmation, cancellation, inline receipts, local-model suggestions, Saved Messages, and reactions. Microphone and transcription logic are tested with synthetic PCM. The app stops microphone capture when leaving the foreground and resumes input on return. Closing a contextual menu leaves the conversation active. Hardware behavior remains unverified.
+28 tests and both builds passed at that time (the current branch has 56 tests). The official simulator verifies direct inbox entry, blank gesture capture, two-tap reply confirmation, cancellation, inline receipts, local-model suggestions, Saved Messages, and reactions. Microphone and transcription logic are tested with synthetic PCM. The app stops microphone capture when leaving the foreground and resumes input on return. Closing a contextual menu leaves the conversation active. Hardware behavior remains unverified.
 
 The source is ready for owner login and a hosted HTTPS endpoint. No real Telegram receipt, live speech receipt or DoraHacks submission is claimed.

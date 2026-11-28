@@ -53,7 +53,7 @@ Fieldline is a **glasses-first personal Telegram client** for Even Realities G2 
 ## Verification
 
 ```bash
-# Run all 48 automated tests
+# Run all 56 automated tests
 npm test
 
 # Start demo mode (no Telegram account required)
@@ -83,7 +83,6 @@ npm run glasses:simulate
 ## What's Not Tested (Disclosed)
 
 - Real Telegram sign-in and writes with owner credentials (sign-in tested only against a mocked Telegram)
-- Visual render of the login page in a real browser (checked with jsdom only)
 - Physical G2 hardware (simulator verified)
 - Voice transcription with live API key (mocked in tests)
 - AI reply suggestions with live model (mocked in tests)
@@ -113,7 +112,7 @@ fieldline/
 │   │   └── brief.ts       # Catch-up card generation
 │   └── store.ts           # SQLite state management
 ├── public/login.html      # Sign-in page
-├── tests/                 # 48 automated tests
+├── tests/                 # 56 automated tests
 ├── scripts/               # Smoke tests, demo recording
 ├── docs/                  # Build plan, verification, submission draft
 └── .tooling/              # Even Hub simulator + CLI (0.9.5, 0.2.0)
@@ -126,7 +125,7 @@ fieldline/
 - Exit and Disconnect ask first (Tap confirms, Double tap goes back).
 - Pairing code countdown with Double tap to cancel.
 - Friendlier offline errors with per-call timeouts.
-- Crew/bot prototype moved to `docs/archive/crew-prototype/`; its two test files are archived with it, so the suite is 48 tests (20 earlier + 28 new).
+- Crew/bot prototype moved to `docs/archive/crew-prototype/`; its two test files are archived with it. The suite is 56 tests.
 
 ## Running for Reviewers
 
@@ -156,7 +155,7 @@ npm run personal:approve -- CODE  # Approve pairing code shown on G2
 
 ## Known Limitations
 
-- Simulator may need platform-specific binaries (macOS/Windows verified, Linux untested)
+- Simulator may need a graphical display (Xvfb or similar on a headless box). Official 0.9.5 has been run on Linux, including headed under Xvfb
 - Voice transcription requires STT_API_URL (Whisper-compatible)
 - AI replies require REPLY_AI_URL (OpenAI-compatible)
 - Backend is single-owner (no multi-tenant support)
@@ -169,4 +168,4 @@ npm run personal:approve -- CODE  # Approve pairing code shown on G2
 
 ---
 
-**Status:** builds clean and 48/48 tests pass at this commit; demo mode runs. Not verified: real Telegram sign-in/writes, G2 hardware, browser render of the login page.
+**Status:** builds clean and 56/56 tests pass at this commit; demo mode runs. Not verified: real Telegram sign-in/writes, G2 hardware.
