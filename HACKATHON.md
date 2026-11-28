@@ -2,7 +2,7 @@
 
 **Team:** Hudson Beard  
 **Submission Deadline:** Sunday, November 29, 2026, 1:59 PM Central  
-**Repository:** github.com/hudsonbeard/fieldline (or as configured)
+**Repository:** github.com/hudbeard/EvenRealitiesTelegram
 
 ## What It Does
 
@@ -27,7 +27,7 @@ Fieldline is a **glasses-first personal Telegram client** for Even Realities G2 
 - **Deployment:** Docker-ready, single-owner backend
 
 ### Core Features
-- **QR Code Login:** Zero-typing sign-in (scan in Telegram app)
+- **Telegram sign-in page (`/login`):** QR scan, phone code fallback and 2FA, built as an explicit state machine; unit-tested with a mocked Telegram, not yet verified against real Telegram
 - **Demo Mode:** Full synthetic data for testing without Telegram account
 - **Voice Dictation:** PCM → WAV → Whisper-compatible transcription
 - **Reply Suggestions:** Optional AI-powered quick replies (OpenAI-compatible)
@@ -45,7 +45,7 @@ Fieldline is a **glasses-first personal Telegram client** for Even Realities G2 
 1. **Launch:** App opens directly at inbox with unread conversations first
 2. **Browse:** Swipe through chats, preview messages
 3. **Open:** Tap a conversation to see full thread
-4. **Reply:** Tap a message → see reply suggestions → tap to send
+4. **Reply:** Tap a message → see reply suggestions → Tap to review → Tap Send now
 5. **Voice:** Hold on a message → dictate → review text → tap to confirm
 6. **Catch-up:** Menu → Catch-up → see unanswered questions and changes
 7. **Saved:** Menu → Saved Messages → access personal notes
@@ -53,15 +53,14 @@ Fieldline is a **glasses-first personal Telegram client** for Even Realities G2 
 ## Verification
 
 ```bash
-# Run all 28 automated tests
+# Run all 48 automated tests
 npm test
 
 # Start demo mode (no Telegram account required)
 npm run personal:demo
 npm run glasses:simulate
 
-# Real account with QR login
-npm run personal:qr-login  # Scan QR code
+# Real account: start the server, then sign in at http://127.0.0.1:3003/login
 npm run personal:server
 npm run glasses:simulate
 ```
@@ -77,10 +76,14 @@ npm run glasses:simulate
 - ✅ Cancellation preserves drafts
 - ✅ Crash recovery (never retries in-flight writes)
 - ✅ Pairing, auth boundaries, logout
+- ✅ Sign-in state machine with a mocked Telegram: QR refresh on one client, 2FA and wrong password/code retries, cancel in every state, timeouts, flood wait, atomic session save, demo never writes, hot pick-up, rate limit and one-attempt cap
+- ✅ Login page in jsdom against the demo server (QR is an `<img>`, reaches "Signed in as Demo User")
+- ✅ Glasses: watchlist untoggle, confirm screens (Tap vs Double tap), pairing countdown, 1 s send guard
 
 ## What's Not Tested (Disclosed)
 
-- Real Telegram writes with owner credentials (demo mode only so far)
+- Real Telegram sign-in and writes with owner credentials (sign-in tested only against a mocked Telegram)
+- Visual render of the login page in a real browser (checked with jsdom only)
 - Physical G2 hardware (simulator verified)
 - Voice transcription with live API key (mocked in tests)
 - AI reply suggestions with live model (mocked in tests)
@@ -103,11 +106,14 @@ fieldline/
 ├── server/
 │   ├── personal/          # Backend: Telegram, storage, brief
 │   │   ├── mtproto.ts     # Real Telegram MTProto client
-│   │   ├── qr-login.ts    # QR code authentication (NEW)
+│   │   ├── login.ts       # Sign-in state machine (QR, code, 2FA)
+│   │   ├── login-routes.ts # /api/login/* routes, rate limits
+│   │   ├── switchable.ts  # Hot pick-up of a new session
 │   │   ├── demo.ts        # Synthetic data provider
 │   │   └── brief.ts       # Catch-up card generation
 │   └── store.ts           # SQLite state management
-├── tests/                 # 28 automated tests
+├── public/login.html      # Sign-in page
+├── tests/                 # 48 automated tests
 ├── scripts/               # Smoke tests, demo recording
 ├── docs/                  # Build plan, verification, submission draft
 └── .tooling/              # Even Hub simulator + CLI (0.9.5, 0.2.0)
@@ -115,27 +121,12 @@ fieldline/
 
 ## Changes in This PR
 
-### New Features
-1. **QR Code Login** (`server/personal/qr-login.ts`, `scripts/qr-login.ts`)
-   - Implements Telegram's `auth.exportLoginToken` / `auth.importLoginToken`
-   - Zero-typing sign-in: scan QR in Telegram app
-   - Fallback to phone/code/2FA for 2FA-enabled accounts
-
-2. **Improved README**
-   - Clear quickstart for demo mode
-   - QR login instructions with both options
-   - Security and privacy notes
-
-### Bug Fixes & Polish
-- Build system verified (TypeScript, Vite, server build all clean)
-- All 28 tests passing
-- Dependencies properly declared
-- `.gitignore` covers all secrets
-
-### Documentation
-- `HACKATHON.md` — This file (submission overview)
-- Updated README with quickstart and demo script
-- Inline code comments for QR login flow
+- Telegram sign-in at `/login`: QR (refreshed in place), phone code, 2FA; cancel and timeouts; session saved atomically and picked up by the running server. Unit-tested with a mocked Telegram; not verified against real Telegram or hardware.
+- Review before every send (no two-tap send), 1 s guard on Send now.
+- Exit and Disconnect ask first (Tap confirms, Double tap goes back).
+- Pairing code countdown with Double tap to cancel.
+- Friendlier offline errors with per-call timeouts.
+- Crew/bot prototype moved to `docs/archive/crew-prototype/`; its two test files are archived with it, so the suite is 48 tests (20 earlier + 28 new).
 
 ## Running for Reviewers
 
@@ -158,8 +149,7 @@ npm run glasses:simulate     # Terminal 2
 # 1. Get API credentials from https://my.telegram.org
 # 2. Copy .env.example to .env
 # 3. Set TELEGRAM_API_ID and TELEGRAM_API_HASH
-npm run personal:qr-login    # Scan QR code
-npm run personal:server      # Terminal 1
+npm run personal:server      # Terminal 1, then sign in at http://127.0.0.1:3003/login
 npm run glasses:simulate     # Terminal 2
 npm run personal:approve -- CODE  # Approve pairing code shown on G2
 ```
@@ -179,4 +169,4 @@ npm run personal:approve -- CODE  # Approve pairing code shown on G2
 
 ---
 
-**Ready for Review:** Code builds clean, tests pass, demo mode runs, secrets excluded, README complete.
+**Status:** builds clean and 48/48 tests pass at this commit; demo mode runs. Not verified: real Telegram sign-in/writes, G2 hardware, browser render of the login page.

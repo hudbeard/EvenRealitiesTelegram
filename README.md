@@ -6,18 +6,18 @@ A glasses-first personal Telegram client for Even Realities G2 and the R1 ring. 
 
 [88-second glasses-first simulator walkthrough](docs/media/fieldline-glasses-demo.mp4) · [Inbox preview](docs/media/glasses-inbox.png) · [Reply review](docs/media/glasses-review.png) · [Server setup](docs/standalone.md)
 
-**Status:** glasses-only synthetic simulator flows verified; personal Telegram adapter implemented. Real account delivery, live dictation, physical G2 testing, public server deployment, and DoraHacks submission remain unverified.
+**Status:** glasses-only synthetic simulator flows were verified on an earlier build. Telegram sign-in (QR, phone code, 2FA) is implemented and unit-tested against a mocked Telegram, but has **not** been verified against real Telegram or on G2 hardware. Real account delivery, live dictation, physical G2 testing, public server deployment, and DoraHacks submission remain unverified.
 
 ## What happens on the glasses
 
 - **Inbox.** Launch directly into chats, with unread conversations first. Swipe to preview and tap to open. Hold in Chats to find a conversation by voice.
 - **Threads:** swipe messages, paginate full text, inspect the original replied-to message, search history and load older messages. Media is identified; view rich media in Telegram.
-- **Replies.** Tap an open message to see a ready-to-send reply and swipe for alternatives. Tap again to send the exact text shown and return to the conversation. Hold to dictate and release to review. Double tap keeps the draft attached to the source.
+- **Replies.** Tap an open message to see a ready-to-send reply and swipe for alternatives. Tap to review it, then Tap **Send now** to send the exact text shown (a tap within 1 second of opening review is ignored). Hold to dictate and release to review. Double tap keeps the draft attached to the source.
 - **Actions:** reply as yourself, write a new message, react with thumbs up/heart/check, or forward to Saved Messages. Cancellation preserves a draft. Missing receipts stay uncertain; writes are not automatically retried.
 - **Catch-up:** source-linked changes, unanswered questions, replies and your stated commitments. Read the evidence and open the underlying conversation. Manage its ten-chat selection entirely on G2.
 - **Saved Messages:** a real Telegram self-chat, readable and writable from the glasses.
 
-Swipe to select, tap to open, and double tap to go back. Tap then hold for Even Hub shortcuts such as New message, Find in chat, and Next unread chat. Hold on a message to dictate. Model-backed suggestions are optional and fall back to built-in replies. Double tap at the Telegram home screen to open the system exit confirmation. The G2 display uses separate context and preview areas, brightness for focus, and native pickers for reactions and characters.
+Swipe to select, tap to open, and double tap to go back. Tap then hold for Even Hub shortcuts such as New message, Find in chat, and Next unread chat. Hold on a message to dictate. Model-backed suggestions are optional and fall back to built-in replies. Double tap on Chats asks before exiting: Tap exits, Double tap goes back. The G2 display uses separate context and preview areas, brightness for focus, and native pickers for reactions and characters.
 
 ## Quickstart — Demo Mode (No Telegram Account Required)
 
@@ -38,59 +38,28 @@ npm run personal:demo
 npm run glasses:simulate
 ```
 
-**Sign in (demo mode):** Open http://127.0.0.1:3003/login — QR code auto-scans after 3 seconds, or click "simulate scan now"
+**Sign in (demo mode):** open http://127.0.0.1:3003/login. The demo QR "scans" itself after about 3 seconds, or click "Simulate the scan now". The page ends at "Signed in as Demo User". The phone tab accepts any number and any code except `00000` (which shows the wrong-code path). Demo mode makes no Telegram calls and never writes a session file.
 
-**To pair glasses:** Tap twice on simulator. The pairing code expires in 5:00 — double-tap to cancel.
+**To pair glasses:** Tap on the simulator for a 6-digit code (it counts down from 5:00; Double tap cancels), then Tap again to approve the demo.
 
 **Display mirror:** http://127.0.0.1:3003/glasses.html shows what appears on the glasses.
 
 **Controls:** Swipe to navigate, Tap to open/confirm, Double tap to go back, Hold to dictate (when voice is enabled).
 
----
+## Real Telegram account (optional)
 
-## Real Telegram Account Setup
+1. Get your own API credentials at https://my.telegram.org.
+2. Copy `.env.example` to `.env` and set `TELEGRAM_API_ID` and `TELEGRAM_API_HASH`.
+3. `npm run personal:server`. With no saved session the server starts signed out (Telegram routes answer 503 until you sign in).
+4. Open http://127.0.0.1:3003/login and choose **QR Code** (Telegram on your phone: Settings → Devices → Link Desktop Device) or **Phone Number** (code sent by Telegram). Enter your two-step verification password if asked. A wrong code or password asks again.
+5. On success the session is written atomically to `.data/personal.session` (mode 0600, git-ignored) and the running server switches to your account without a restart.
+6. Pair the glasses: tap for a code on G2, then `npm run personal:approve -- CODE`.
 
-For production use with your real Telegram account:
+The terminal fallback `npm run personal:login` (phone, code, 2FA) still works and writes the same file.
 
-1. Get API credentials from https://my.telegram.org
-2. Set in `.env`: `TELEGRAM_API_ID` and `TELEGRAM_API_HASH`
-3. Open http://127.0.0.1:3003/login
-4. Choose **QR Code** (scan with Telegram mobile) or **Phone Number** (SMS code)
-5. Enter 2FA password if prompted
-6. Start server: `npm run personal:server`
-7. Pair glasses as above
+**Honest status:** sign-in is an explicit state machine (`server/personal/login.ts`) covered by unit tests with a mocked Telegram client and fake timers. It has not been run against real Telegram servers or on G2 hardware. Login routes are rate-limited per IP and allow one sign-in at a time.
 
-## Real Telegram Account (Optional)
-
-For real personal-account access:
-
-1. **Get Telegram API credentials** from https://my.telegram.org
-2. Copy `.env.example` to `.env` and set:
-   - `TELEGRAM_API_ID` (your API ID)
-   - `TELEGRAM_API_HASH` (your API hash)
-
-3. **Sign in with QR Code (Recommended — Zero Typing!):**
-   ```bash
-   npm run personal:qr-login  # Displays QR code
-   # Scan in Telegram app: Settings → Devices → Link Desktop Device
-   
-   # Once logged in, start the server:
-   npm run personal:server
-   npm run glasses:simulate
-   
-   # Approve the pairing code shown on G2:
-   npm run personal:approve -- CODE
-   ```
-
-4. **Or sign in with Phone/Code:**
-   ```bash
-   npm run personal:login    # Interactive: phone, code, 2FA if enabled
-   npm run personal:server
-   npm run glasses:simulate
-   npm run personal:approve -- CODE
-   ```
-
-**Security:** The session is saved to `.data/personal.session` (gitignored). Never commit this file or share your credentials.
+**Security:** the session file is account access. Never commit it (`.gitignore` covers `.data/`, `.env*` and `*.session`) or share your credentials.
 
 ## Dictation and reply ideas
 
@@ -125,7 +94,7 @@ npm run server:build
 npm run glasses:test
 ```
 
-28 automated tests cover source revision binding, single dispatch, ambiguous delivery, account-wide access boundaries, exact new-message text, Saved Messages, read state, speech formatting, review pagination and cancellation. The glasses smoke test drives official SDK gestures and captures actual 576×288 framebuffers. It verifies that the blank layer owns list swipes, the app opens directly to unread chats, and two taps produce one exact reply and an inline receipt. It also covers cancellation, plan-specific suggestions, Saved Messages, and native reaction selection. No real Telegram messages are sent by these tests.
+48 automated tests (`npm test`) cover the sign-in state machine with a mocked Telegram (QR refresh, 2FA and wrong-code retries, cancel, timeouts, atomic save, hot pick-up, rate limits), the login page in jsdom against the demo server, source revision binding, single dispatch, ambiguous delivery, account-wide access boundaries, exact new-message text, Saved Messages, read state, speech formatting, review pagination and cancellation. The glasses smoke test drives official SDK gestures and captures actual 576×288 framebuffers. It verifies that the blank layer owns list swipes and the app opens directly to unread chats; the smoke script predates review-before-send and has not been re-run on this branch. It also covers cancellation, plan-specific suggestions, Saved Messages, and native reaction selection. No real Telegram messages are sent by these tests.
 
 [Glasses-first verification and setup](docs/standalone.md) · [Submission draft](docs/submission-draft.md) · [Earlier personal prototype](docs/personal-account.md) · [Original bot prototype](docs/crew-prototype.md)
 

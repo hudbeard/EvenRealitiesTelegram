@@ -16,7 +16,7 @@ The primary entrypoint is glasses.html (version 0.5.0). The previous bot and per
 
 ## Verification and remaining work
 
-- Source implementation and 28 automated tests cover the standalone controller and personal API; frontend/server builds pass.
+- Source implementation and 48 automated tests cover the standalone controller, personal API and Telegram sign-in (mocked Telegram); frontend/server builds pass. Sign-in has not been verified against real Telegram or on hardware.
 - Official simulator gestures and actual G2 framebuffers verify the glasses-only journey.
 - A deployable server image recipe, production server build and package entrypoint are provided.
 - Owner still needs to log into Telegram locally and verify a real message/reaction/save receipt.
