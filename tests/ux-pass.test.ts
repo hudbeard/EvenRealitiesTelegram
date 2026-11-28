@@ -155,3 +155,145 @@ test("ux must2: inside a search, swiping past the end keeps the search end slot"
     h.close();
   }
 });
+
+// MUST 3 — suggested replies on the review screen; send is two taps
+
+test("ux must3: Tap Reply → review with ideas → Tap Send now (two taps), guarded and confirmed", async () => {
+  const h = demoHarness();
+  try {
+    await h.app.start();
+    await focusRow(h.app, "Maya");
+    await h.app.input("tap"); // tap 1: open the chat on its unread message
+    await h.app.input("tap"); // reply: review screen with the first idea
+    assert.equal(h.app.frame.title, "Send · Maya");
+    assert.equal(h.app.frame.badge, "1 / 2");
+    assert.equal(h.app.frame.context, "Re Maya: Can you bring the prototype too?");
+    assert.equal(h.app.frame.body, "I’ll check and get back to you.");
+    assert.equal(h.app.frame.footer, "Swipe  Ideas     Tap  Send now     Double tap  Back");
+    await h.app.input("tap"); // same instant: the entry guard holds
+    h.tick(999);
+    await h.app.input("tap"); // still inside 1 s
+    assert.equal(h.p.writes.length, 0);
+    h.tick(1);
+    await h.app.input("tap"); // send
+    assert.equal(h.p.writes.length, 1);
+    assert.deepEqual(h.p.writes[0], {
+      kind: "reply",
+      chatId: "demo:maya",
+      messageId: 11,
+      text: "I’ll check and get back to you.",
+    });
+    const action = h.calls.find((c) => c.path === "/glasses/action")!;
+    assert.equal(action.body.confirmed, true);
+    assert.match(h.app.frame.context ?? "", /Demo Sent/);
+  } finally {
+    h.close();
+  }
+});
+
+test("ux must3: swiping ideas never re-arms or skips the guard and sends the idea shown", async () => {
+  const h = demoHarness();
+  try {
+    await h.app.start();
+    await focusRow(h.app, "Maya");
+    await h.app.input("tap");
+    await h.app.input("tap");
+    await h.app.input("down"); // swipe right away
+    await h.app.input("tap"); // still the opening guard
+    assert.equal(h.p.writes.length, 0);
+    h.tick(1500);
+    await h.app.input("up");
+    await h.app.input("down"); // swipes after the guard do not re-arm it
+    assert.equal(h.app.frame.body, "Can you share a little more detail?");
+    await h.app.input("tap");
+    assert.equal(h.p.writes.length, 1);
+    assert.equal(h.p.writes[0].text, "Can you share a little more detail?");
+  } finally {
+    h.close();
+  }
+});
+
+test("ux must3: Double tap on review sends nothing; the server rejects unconfirmed actions", async () => {
+  const h = demoHarness();
+  try {
+    await h.app.start();
+    await focusRow(h.app, "Maya");
+    await h.app.input("tap");
+    await h.app.input("tap");
+    h.tick(5000);
+    await h.app.input("back");
+    assert.equal(h.app.frame.title, "Maya");
+    assert.equal(h.p.writes.length, 0);
+    assert.equal(h.calls.filter((c) => c.path === "/glasses/action").length, 0);
+    // The harness mirrors index.ts: without confirmed:true nothing is written.
+    await assert.rejects(
+      h.app.api("/glasses/action", { operationId: "x", action: h.app.pending, revision: "" }),
+      /Review and confirm first/,
+    );
+    assert.equal(h.p.writes.length, 0);
+  } finally {
+    h.close();
+  }
+});
+
+test("ux must3: Message actions → Reply lands on the same review screen", async () => {
+  const h = demoHarness();
+  try {
+    await h.app.start();
+    await focusRow(h.app, "Maya");
+    await h.app.input("tap");
+    await h.app.selectShortcut(5); // Message actions
+    assert.equal(h.app.frame.title, "Message actions");
+    await h.app.input("tap"); // Reply
+    assert.equal(h.app.frame.title, "Send · Maya");
+    assert.match(h.app.frame.footer, /Tap  Send now/);
+    await h.app.input("tap");
+    assert.equal(h.p.writes.length, 0, "the tap that chose Reply cannot send");
+  } finally {
+    h.close();
+  }
+});
+
+test("ux must3: an idea too long for one screen goes to paginated review before Send now", async () => {
+  const long = "Sure — " + "I can bring it along with the spare cables and charger. ".repeat(8);
+  const h = demoHarness({ ideas: async () => [long] });
+  try {
+    await h.app.start();
+    await focusRow(h.app, "Maya");
+    await h.app.input("tap");
+    await h.app.input("tap"); // AI idea first (arrives within 750 ms)
+    assert.match(h.app.frame.badge ?? "", /^AI 1 \//);
+    assert.match(h.app.frame.footer, /Tap  Review/);
+    h.tick(1000);
+    await h.app.input("tap"); // to the full, paginated review
+    assert.equal(h.app.frame.title, "Send · Maya");
+    assert.match(h.app.frame.footer, /Next page/);
+    while (h.app.frame.footer.includes("Next page")) await h.app.input("tap");
+    assert.match(h.app.frame.footer, /Tap  Send now/);
+    assert.equal(h.p.writes.length, 0);
+    h.tick(1000);
+    await h.app.input("tap");
+    assert.equal(h.p.writes.length, 1);
+    assert.equal(h.p.writes[0].text, long);
+  } finally {
+    h.close();
+  }
+});
+
+test("ux must3: ideas come from the reply rules or the configured model, labeled as ideas", async () => {
+  const h = demoHarness();
+  try {
+    await h.app.start();
+    await focusRow(h.app, "Build night");
+    await h.app.input("tap"); // "Update: meet at River Cafe at 6:30 instead…"
+    await h.app.input("tap");
+    assert.equal(h.app.frame.body, "Got it, thanks for the update.");
+    await h.app.input("down");
+    assert.equal(h.app.frame.body, "Is 6:30 the new time?");
+    assert.doesNotMatch(h.app.frame.badge ?? "", /^AI/);
+    // Nothing is added to the conversation until Send now.
+    assert.equal(h.p.messages.filter((m) => m.chatId === "demo:crew").length, 3);
+  } finally {
+    h.close();
+  }
+});

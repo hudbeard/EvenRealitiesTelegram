@@ -997,7 +997,7 @@ export class GlassesApp {
           ...fallback.filter((choice) => !initial.includes(choice.text)),
         ];
     }
-    this.drawQuickReply();
+    this.drawQuickReply(true);
     if (request && !initial.length)
       void request.then((replies) => {
         if (this.quick !== quick || !replies.length) return;
@@ -1010,14 +1010,23 @@ export class GlassesApp {
         // Keep the visible choice and confirmation stable; the next swipe reveals new ideas.
       });
   }
-  drawQuickReply() {
+  /**
+   * Review screen with ideas (S3): one screen, one deliberate confirm.
+   * Swipe cycles ideas; Tap sends the exact text shown, but never within 1 s
+   * of arriving here; Double tap goes back without sending. `arm` is false
+   * only for swipes, so changing the idea never re-arms or skips the guard.
+   */
+  drawQuickReply(arm = true) {
     const quick = this.quick!;
     const choice = quick.choices[quick.index];
     const lines = wrap(choice.text);
     this.mode = "quick";
     this.menu = undefined;
+    this.reply = quick.source;
+    this.stageAction(this.replyAction(choice.text), quick.source.revision);
+    if (arm) this.actionGuardUntil = this.now() + 1000;
     this.emit({
-      title: "Reply · " + this.chat!.title,
+      title: "Send · " + this.chat!.title,
       icon: "send",
       badge:
         (choice.ai ? "AI " : "") +
@@ -1025,15 +1034,19 @@ export class GlassesApp {
         " / " +
         quick.choices.length,
       context: fitLine(
-        quick.source.sender +
+        "Re " +
+          quick.source.sender +
           ": " +
           (quick.source.text || "[media]").replace(/\s+/g, " "),
-        525,
+        540,
       ),
       body: lines.slice(0, 5).join("\n"),
       footer:
-        "Swipe  Ideas    Tap  Review" +
-        (this.voiceEnabled ? "    Hold  Dictate" : "    Double tap  Back"),
+        lines.length > 5
+          ? "Swipe  Ideas     Tap  Review     Double tap  Back"
+          : this.voiceEnabled
+            ? "Swipe  Ideas    Tap  Send now    Hold  Dictate"
+            : "Swipe  Ideas     Tap  Send now     Double tap  Back",
       shortcuts: [shortcut.messageActions],
     });
   }
@@ -1052,12 +1065,22 @@ export class GlassesApp {
   }
   async confirmQuickReply() {
     const quick = this.quick!;
-    this.setComposeTarget(quick.source);
     const text = quick.choices[quick.index].text;
+    this.setComposeTarget(quick.source);
     this.setDraft(text);
     const action = this.replyAction(text);
-    // Always go through review - no instant sends (Designer fix #2)
-    this.review(action, quick.source.revision, () => this.drawQuickReply());
+    if (wrap(text).length > 5) {
+      // Too long to show whole here: page through it first, with its own guard.
+      this.review(action, quick.source.revision, () => this.drawQuickReply());
+      return;
+    }
+    if (
+      this.pending?.text !== text ||
+      this.pending.messageId !== action.messageId ||
+      this.pending.kind !== action.kind
+    )
+      this.stageAction(action, quick.source.revision);
+    await this.send(() => this.drawQuickReply());
   }
   async voiceText(text: string) {
     if (this.inputPurpose === "chats") {
@@ -1354,12 +1377,15 @@ export class GlassesApp {
         if (event === "back") {
           if (!this.draft) this.setDraft(quick.choices[quick.index].text);
           await this.thread();
-        } else if (event === "tap") await this.confirmQuickReply();
-        else {
+        } else if (event === "tap") {
+          // The tap that opened this screen must not also send.
+          if (this.now() < this.actionGuardUntil) return;
+          await this.confirmQuickReply();
+        } else {
           quick.index =
             (quick.index + (event === "up" ? -1 : 1) + quick.choices.length) %
             quick.choices.length;
-          this.drawQuickReply();
+          this.drawQuickReply(false);
         }
       } else if (this.mode === "thread") {
         if (event === "back") {

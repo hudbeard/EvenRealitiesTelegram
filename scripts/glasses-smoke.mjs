@@ -179,9 +179,10 @@ await shot("03-thread");
 const original = await history("demo:maya");
 
 await tap();
-assert.equal((await frame()).title, "Reply · Maya");
+// Reply lands on review with ideas: Swipe  Ideas, Tap  Send now (after 1 s).
+assert.equal((await frame()).title, "Send · Maya");
 assert.match((await frame()).context, /prototype too/);
-assert.match((await frame()).footer, /Tap  Review/);
+assert.match((await frame()).footer, /Tap  Send now/);
 const first = (await frame()).body;
 if (process.env.EXPECT_REPLY_IDEAS === "1") {
   assert.match((await frame()).badge, /^AI /);
@@ -197,7 +198,6 @@ assert.equal((await frame()).title, "Maya");
 assert.deepEqual(await history("demo:maya"), original);
 await tap();
 assert.equal((await frame()).body, chosen);
-await tap();
 assert.equal((await frame()).title, "Send · Maya");
 assert.match((await frame()).footer, /Tap  Send now/);
 assert.deepEqual(await history("demo:maya"), original);
@@ -239,7 +239,7 @@ await shot("09-reacted");
 await shortcut("Next unread chat");
 assert.equal((await frame()).title, "Build night");
 await tap();
-assert.equal((await frame()).title, "Reply · Build night");
+assert.equal((await frame()).title, "Send · Build night");
 if (process.env.EXPECT_REPLY_IDEAS === "1")
   assert.equal((await frame()).body, "Is River Cafe the final spot?");
 await gesture("down");
