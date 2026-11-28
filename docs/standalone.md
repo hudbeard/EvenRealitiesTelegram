@@ -16,6 +16,8 @@ Direct channel posting is not offered. Channel text histories request sponsored 
 
 For local production, configure .env with your own TELEGRAM_API_ID / TELEGRAM_API_HASH, then npm run build, npm run server:build, and npm start, and sign in at /login (or run npm run personal:login yourself first). Build output is dist-server; the production server does not require tsx. Default host is 127.0.0.1:3003.
 
+**Warning:** `/login` has no owner authentication. Keep this server on localhost and never host it on a public network.
+
 Dockerfile uses Node 24, builds frontend/server, installs production dependencies only, and runs as node. .dockerignore excludes .env, account data, .git, tools and generated artifacts. The container has no Telegram login by default. Either sign in at /login once it is running (the session is saved under /app/.data and picked up without a restart), or provision .data/personal.session first; mount .data and supply environment variables either way. Protect that volume as account access material.
 
 Example for an operator who has already created .data/personal.session:
@@ -23,11 +25,11 @@ Example for an operator who has already created .data/personal.session:
 ```sh
 docker build -t fieldline .
 docker run --rm -p 127.0.0.1:3003:3003 --env-file .env \
-  -e PERSONAL_HOST=0.0.0.0 -e PERSONAL_ORIGIN=https://your-app.example \
+  -e PERSONAL_HOST=0.0.0.0 -e PERSONAL_ORIGIN=http://127.0.0.1:3003 \
   -v "$(pwd)/.data:/app/.data" fieldline
 ```
 
-Put HTTPS in front of the container and persist /app/.data across restarts. PERSONAL_ORIGIN is the exact browser/WebView origin accepted by CORS. For a packaged WebView with an opaque/variable origin, PERSONAL_ORIGIN=* permits bearer-authenticated requests without cookies. Do not expose simulator automation port 9899. This container configuration has been supplied, but no Docker engine or public host deployment has been verified in this workspace.
+If you run the container, bind it to localhost, persist /app/.data across restarts, and do not put it on a public network: `/login` has no owner authentication. PERSONAL_ORIGIN is the exact browser/WebView origin accepted by CORS. For a packaged WebView with an opaque/variable origin, PERSONAL_ORIGIN=* permits bearer-authenticated requests without cookies. Do not expose simulator automation port 9899. This container configuration has been supplied, but it is not ready for a hosted HTTPS endpoint; no Docker engine or public host deployment has been verified in this workspace.
 
 On G2, generate a pairing code and approve it on the server with npm run personal:approve -- CODE. The production image includes the approval helper; use docker exec CONTAINER npm run personal:approve -- CODE so it reads the same .data/personal-approval.key. The synthetic demo server (`/api/health` with `synthetic: true`, mode `personal-demo`) is paired automatically by the glasses page; live servers never are, and live approval still needs the local key. Pairing codes expire after five minutes; bearer sessions expire after four hours. A rejected session requires pairing again. Disconnect revokes only that display session, not the underlying Telegram account session.
 
@@ -51,4 +53,4 @@ Configure a Whisper-compatible multipart endpoint through STT_API_URL, STT_API_K
 
 28 tests and both builds passed at that time (the current branch has 82 tests). The official simulator verifies direct inbox entry, blank gesture capture, two-tap reply confirmation, cancellation, inline receipts, local-model suggestions, Saved Messages, and reactions. Microphone and transcription logic are tested with synthetic PCM. The app stops microphone capture when leaving the foreground and resumes input on return. Closing a contextual menu leaves the conversation active. Hardware behavior remains unverified.
 
-The source is ready for owner login and a hosted HTTPS endpoint. No real Telegram receipt, live speech receipt or DoraHacks submission is claimed.
+`/login` has no owner authentication: keep the server on localhost and never host it on a public network. The source is not ready for a hosted HTTPS endpoint. No real Telegram receipt, live speech receipt or DoraHacks submission is claimed.

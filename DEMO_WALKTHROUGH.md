@@ -1,8 +1,8 @@
 # Fieldline demo walkthrough
 
-**Branch:** `cursor/hackathon-polish-9492`
-**Tests:** 56/56 passing (`npm test`)
-**What was verified for this document:** build and tests; the demo server's `/api/login/*` flow with `curl`; the login page in jsdom against the demo server. The simulator, the glasses smoke test, a real browser and G2 hardware were **not** run for the UX pass (branch `ux-pass`). Glasses steps below describe the behaviour in code and unit tests.
+**Branch:** `main`
+**Tests:** 82/82 passing (`npm test`)
+**What was verified for this document:** build and tests; the demo server's `/api/login/*` flow with `curl`; the login page in jsdom against the demo server. Tester ran `npm run glasses:test` at `f494e57` on Even Hub simulator 0.9.5 (headed) and recorded a PASS: "11 framebuffers, blank gesture capture, two-tap exact reply, cancellation, inline receipt, native shortcuts, save and reaction." QA independently ran the same script at `f494e57` on a fresh clone and recorded the same PASS (frames now read `Send · Maya` / `Send · Build night`). The smoke script's expectations were updated in `3a11d25`, `a42e831` and `679005c`. This docs-only pass did not re-run the simulator. G2 hardware and real Telegram were not used.
 
 ## Setup
 

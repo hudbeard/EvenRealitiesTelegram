@@ -130,11 +130,11 @@ fieldline/
 
 ## Running for Reviewers
 
-**Branch:** `cursor/hackathon-polish-9492`
+**Branch:** `main`
 
 **Demo Mode (Recommended):**
 ```bash
-git checkout cursor/hackathon-polish-9492
+git checkout main
 npm ci
 npm ci --prefix .tooling
 npm run build
