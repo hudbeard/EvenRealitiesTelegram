@@ -70,6 +70,17 @@ async function gesture(action) {
 }
 const tap = () => gesture("click");
 const back = () => gesture("double_click");
+/** Wait out the 1 s review entry guard, then confirm Send/Save/React now. */
+async function confirmReviewed() {
+  const open = await frame();
+  assert.match(
+    open.footer,
+    /Tap  (Send|Save|React) now/,
+    "Expected a review footer, got: " + open.footer,
+  );
+  await delay(1100);
+  return tap();
+}
 async function choose(label) {
   for (let i = 0; i < 130; i++) {
     const current = await frame();
@@ -157,7 +168,7 @@ const original = await history("demo:maya");
 await tap();
 assert.equal((await frame()).title, "Reply · Maya");
 assert.match((await frame()).context, /prototype too/);
-assert.match((await frame()).footer, /Tap  Send/);
+assert.match((await frame()).footer, /Tap  Review/);
 const first = (await frame()).body;
 if (process.env.EXPECT_REPLY_IDEAS === "1") {
   assert.match((await frame()).badge, /^AI /);
@@ -174,6 +185,10 @@ assert.deepEqual(await history("demo:maya"), original);
 await tap();
 assert.equal((await frame()).body, chosen);
 await tap();
+assert.equal((await frame()).title, "Send · Maya");
+assert.match((await frame()).footer, /Tap  Send now/);
+assert.deepEqual(await history("demo:maya"), original);
+await confirmReviewed();
 assert.equal((await frame()).title, "Maya");
 assert.match((await frame()).context, /Demo Sent/);
 assert.equal((await frame()).body.split("\n")[0], chosen);
@@ -187,7 +202,8 @@ await shot("07-shortcuts");
 await gesture("context_menu");
 await shortcut("Message actions");
 await choose("Save message");
-await tap();
+assert.match((await frame()).footer, /Tap  Save now/);
+await confirmReviewed();
 assert.match((await frame()).context, /Demo Saved/);
 await back();
 assert.equal((await frame()).split.heading, "Maya");
@@ -202,7 +218,8 @@ assert.deepEqual((await frame()).native, ["Thumbs up", "Heart", "Check"]);
 await gesture("down");
 await tap();
 assert.match((await frame()).body, /^Heart/);
-await tap();
+assert.match((await frame()).footer, /Tap  React now/);
+await confirmReviewed();
 assert.match((await frame()).context, /Demo Reacted/);
 await shot("09-reacted");
 
