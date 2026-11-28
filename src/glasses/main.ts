@@ -7,6 +7,8 @@ import {
 import { GlassesApp, type Frame, type Input } from "./controller.js";
 import { GlassesDisplay } from "./display.js";
 import { GlassesMicrophone, type VoiceMode } from "./voice.js";
+import { PairingCountdown, formatRemaining } from "./pairing.js";
+import { requestTimeout, offlineMessage } from "./net.js";
 import "./style.css";
 const host = document.getElementById("app")!;
 host.innerHTML =
@@ -16,13 +18,13 @@ const apiBase = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
 let token = localStorage.getItem("fieldline.glasses.session") ?? "",
   bridge: EvenAppBridge | undefined,
   display: GlassesDisplay | undefined,
-  foregroundOverlay = false,
   running = true,
   queue = Promise.resolve(),
   pairId = "",
   pairCode = "",
   synthetic = false,
-  pairTimer: ReturnType<typeof setTimeout> | undefined;
+  pollTimer: ReturnType<typeof setTimeout> | undefined,
+  countdown: PairingCountdown | undefined;
 let current: Frame = {
   title: "FIELDLINE / TELEGRAM",
   body: "Connecting to your server…",
@@ -30,15 +32,16 @@ let current: Frame = {
   icon: "telegram",
 };
 async function api(path: string, body?: unknown) {
+  const method = body === undefined ? "GET" : "POST";
   try {
     const r = await fetch(apiBase + "/api" + path, {
-      method: body === undefined ? "GET" : "POST",
+      method,
       headers: {
         authorization: "Bearer " + token,
         ...(body === undefined ? {} : { "content-type": "application/json" }),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      signal: AbortSignal.timeout(3000), // Faster timeout: 3s instead of 20s
+      signal: AbortSignal.timeout(requestTimeout(path, method)),
     });
     const data = await r.json();
     if (r.status === 401) {
@@ -55,20 +58,11 @@ async function api(path: string, body?: unknown) {
         { status: r.status }
       );
     return data;
-  } catch (err: any) {
-    // Better error messages (Designer fix #3)
-    if (err.name === "TimeoutError" || err.name === "AbortError") {
-      throw Object.assign(
-        new Error("Can't reach your server. Nothing was sent."),
-        { status: 0, timeout: true }
-      );
-    }
-    if (err.name === "TypeError" && err.message.includes("fetch")) {
-      throw Object.assign(
-        new Error("Can't reach your server. Nothing was sent."),
-        { status: 0, network: true }
-      );
-    }
+  } catch (err) {
+    const name = (err as Error).name;
+    // Timeouts and network failures (TypeError in every browser engine).
+    if (name === "TimeoutError" || name === "AbortError" || err instanceof TypeError)
+      throw Object.assign(new Error(offlineMessage(method)), { status: 0 });
     throw err;
   }
 }
@@ -117,11 +111,18 @@ const app = new GlassesApp(
   },
   () => startVoice("toggle"),
 );
+function stopPairing() {
+  pairId = "";
+  pairCode = "";
+  clearTimeout(pollTimer);
+  pollTimer = undefined;
+  countdown?.stop();
+  countdown = undefined;
+}
 function error(e: unknown) {
   el("status").textContent = (e as Error).message;
   if (!token) {
-    pairId = "";
-    pairCode = "";
+    stopPairing();
     render({
       title: "CONNECT TELEGRAM",
       body: (e as Error).message + "\n\nTap to pair this display.",
@@ -161,25 +162,25 @@ function safe(f: () => Promise<unknown>) {
   void f().catch(error);
 }
 async function pollPair() {
-  clearTimeout(pairTimer);
+  clearTimeout(pollTimer);
   if (!pairId || !running) return;
+  const id = pairId;
   try {
-    const r = await api("/pair/" + pairId);
+    const r = await api("/pair/" + id);
+    if (id !== pairId) return; // cancelled or replaced while waiting
     if (r.token) {
       token = r.token;
       localStorage.setItem("fieldline.glasses.session", token);
-      pairId = "";
-      pairCode = "";
+      stopPairing();
       await app.start();
       el("status").textContent = synthetic
         ? "Synthetic demo · no real messages sent"
         : "Personal Telegram connected";
       return;
     }
-    pairTimer = setTimeout(() => safe(pollPair), 1500);
+    pollTimer = setTimeout(() => safe(pollPair), 1500);
   } catch (e) {
-    pairId = "";
-    pairCode = "";
+    if (id === pairId) stopPairing();
     throw e;
   }
 }
@@ -192,10 +193,7 @@ async function input(event: Input, nativeIndex?: number) {
   }
   if (!token) {
     if (event === "back" && pairId) {
-      // Cancel pairing (Designer fix #10)
-      pairId = "";
-      pairCode = "";
-      clearTimeout(pairTimer);
+      stopPairing();
       render({
         title: "TELEGRAM / FIELDLINE",
         body: "Your Telegram, on G2.\n\nChats · messages · replies\nReactions · Saved Messages\n\nTap to connect this display.",
@@ -207,43 +205,39 @@ async function input(event: Input, nativeIndex?: number) {
     if (event !== "tap") return;
     if (!pairId) {
       const p = await api("/pair", {});
+      stopPairing();
       pairId = p.id;
       pairCode = p.code;
-      const expiresAt = p.expiresAt;
-      
-      // Show pairing with countdown (Designer fix #10)
-      const updatePairingCountdown = () => {
-        const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
-        if (remaining > 0 && pairId === p.id) {
-          const mins = Math.floor(remaining / 60);
-          const secs = remaining % 60;
-          render({
-            title: synthetic ? "CONNECT SYNTHETIC DEMO" : "PAIR THIS DISPLAY",
-            body:
-              "Pairing code: " +
-              pairCode +
-              "\n\n" +
-              (synthetic
-                ? "Tap again to enter the demo."
-                : "Approve this code from your server.\nPhone is only needed for setup."),
-            footer: synthetic
-              ? "Tap: approve · Double tap: cancel"
-              : `Expires in ${mins}:${secs.toString().padStart(2, "0")} · Double tap: cancel`,
-            icon: "glasses",
-          });
-          pairTimer = setTimeout(updatePairingCountdown, 1000);
-        } else if (pairId === p.id) {
-          pairId = "";
-          pairCode = "";
+      const pairingFrame = (left: number): Frame => ({
+        title: synthetic ? "CONNECT SYNTHETIC DEMO" : "PAIR THIS DISPLAY",
+        body:
+          "Pairing code: " +
+          pairCode +
+          "\n\n" +
+          (synthetic
+            ? "Tap again to enter the demo."
+            : "Approve this code from your server.\nPhone is only needed for setup."),
+        footer:
+          (synthetic ? "Tap: approve · " : "") +
+          "Expires " +
+          formatRemaining(left) +
+          " · Double tap: cancel",
+        icon: "glasses",
+      });
+      // Own timer for the countdown; pollPair uses pollTimer.
+      countdown = new PairingCountdown(
+        Number(p.expiresAt),
+        (left) => render(pairingFrame(left)),
+        () => {
+          stopPairing();
           render({
             title: "PAIRING EXPIRED",
             body: "The pairing code expired.\n\nTap to generate a new code.",
             footer: "Tap: try again",
             icon: "glasses",
           });
-        }
-      };
-      updatePairingCountdown();
+        },
+      ).start();
       safe(pollPair);
     } else if (synthetic) {
       await api("/pair/approve", { code: pairCode });
@@ -314,7 +308,8 @@ async function startVoice(mode: VoiceMode = "hold") {
 function stop() {
   running = false;
   app.active = false;
-  clearTimeout(pairTimer);
+  clearTimeout(pollTimer);
+  countdown?.stop();
   safe(() => mic.cancel());
 }
 window.addEventListener("pagehide", stop);
@@ -360,19 +355,19 @@ void (async () => {
         return;
       }
       if (type === OsEventTypeList.FOREGROUND_ENTER_EVENT) {
-        // Menu opened - mark as overlay
-        foregroundOverlay = true;
         if (!running) {
           running = true;
           app.active = true;
-          if (pairId) safe(pollPair);
+          if (pairId) {
+            countdown?.start();
+            safe(pollPair);
+          }
           render(current);
         }
         return;
       }
       if (type === OsEventTypeList.FOREGROUND_EXIT_EVENT) {
-        // Menu closed - never stop app (Designer fix #4)
-        foregroundOverlay = false;
+        // A system menu or exit dialog closed; only SYSTEM_EXIT stops the app.
         return;
       }
       if (!running) return;

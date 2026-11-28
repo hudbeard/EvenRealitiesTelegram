@@ -136,6 +136,12 @@ export class GlassesApp {
   operationId = "";
   pendingRevision = "";
   cards: BriefCard[] = [];
+  /** Clock for the Send-now guard; tests replace it. */
+  now: () => number = () => Date.now();
+  /** Called after the display session is revoked. */
+  disconnected: () => void = () => location.reload();
+  /** A review's action cannot run before this time (1 s entry guard). */
+  private actionGuardUntil = 0;
   constructor(
     public api: Request,
     public changed: (frame: Frame) => void,
@@ -225,13 +231,13 @@ export class GlassesApp {
     this.chatList();
   }
   confirmExit() {
-    // Designer fix #4: Confirm before exit
-    this.notice(
-      "EXIT TO SYSTEM",
-      "Double tap again to exit this app.",
-      async () => {
-        await this.exit();
-      }
+    // Tap exits; Double tap (Back) returns to Chats.
+    this.confirm(
+      "EXIT FIELDLINE?",
+      "Close Fieldline on your glasses.",
+      "Exit now",
+      () => this.exit(),
+      () => this.chatList(),
     );
   }
   async openSaved() {
@@ -626,6 +632,7 @@ export class GlassesApp {
     } = {},
   ) {
     this.mode = "read";
+    this.actionGuardUntil = 0;
     this.menu = undefined;
     this.readContext = options.context;
     this.readBadge = options.badge;
@@ -1045,6 +1052,8 @@ export class GlassesApp {
         action: actionLabel === "Send" ? "Send now" : actionLabel + " now",
       },
     );
+    // The tap that opened review must not also confirm it.
+    this.actionGuardUntil = this.now() + 1000;
   }
   async send(cancel: Back = () => this.thread()) {
     const action = this.pending!;
@@ -1182,7 +1191,7 @@ export class GlassesApp {
           "Tap to " + (this.watched.includes(c.id) ? "remove" : "include"),
         run: async () => {
           const ids = this.watched.includes(c.id)
-            ? this.watched.includes(c.id)
+            ? this.watched.filter((id) => id !== c.id)
             : [...this.watched, c.id];
           const d = await this.api("/watch", { ids });
           this.watched = d.watched;
@@ -1231,24 +1240,36 @@ export class GlassesApp {
         {
           label: "Disconnect display", // Designer fix #8
           detail: "Revoke server access",
-          run: () => {
-            // Designer fix #11: Confirm before disconnect
-            this.notice(
+          run: () =>
+            // Tap disconnects; Double tap (Back) returns to Settings.
+            this.confirm(
               "DISCONNECT?",
               "The glasses will need a new pairing code after disconnect.",
+              "Disconnect now",
               async () => {
                 await this.api("/logout", {});
-                location.reload();
-              }
-            );
-          },
+                this.disconnected();
+              },
+              () => this.connection(),
+            ),
         },
       ],
       () => this.home(),
     );
   }
+  /** Informational screen: Tap and Double tap both continue. */
   notice(title: string, text: string, next: () => void | Promise<void>) {
     this.read(title, text, "info", next, next);
+  }
+  /** Confirmation: only Tap runs the action; Double tap (Back) cancels. */
+  confirm(
+    title: string,
+    text: string,
+    action: string,
+    run: () => void | Promise<void>,
+    cancel: Back,
+  ) {
+    this.read(title, text, "info", run, cancel, { action });
   }
   async input(event: Input, nativeIndex?: number) {
     if (this.busy || !this.active) return;
@@ -1311,7 +1332,10 @@ export class GlassesApp {
           Math.ceil(wrap(this.reading).length / this.readPageSize()) - 1,
         );
         if (event === "back") await this.onReadBack();
-        else if (event === "tap" && this.page === max) await this.onRead();
+        else if (event === "tap" && this.page === max) {
+          if (this.now() < this.actionGuardUntil) return;
+          await this.onRead();
+        }
         else {
           this.page = Math.max(
             0,
