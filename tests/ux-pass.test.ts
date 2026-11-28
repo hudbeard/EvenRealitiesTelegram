@@ -297,3 +297,97 @@ test("ux must3: ideas come from the reply rules or the configured model, labeled
     h.close();
   }
 });
+
+// MUST 4 — inbox and thread density
+
+import { getTextWidth } from "@evenrealities/pretext";
+import { relativeTime } from "../src/glasses/text.js";
+import { inboxHeading, inboxLabel, unreadBadge } from "../src/glasses/controller.js";
+import { DemoPersonal } from "../server/personal/demo.js";
+import { AccountTelegram } from "../server/personal/mtproto.js";
+import type { TelegramClient } from "teleproto";
+import { DEMO_NOW } from "./helpers/glasses-harness.js";
+
+test("ux must4: relative time buckets", () => {
+  const now = new Date(2026, 10, 28, 15, 0).getTime();
+  assert.equal(relativeTime(now - 20_000, now), "just now");
+  assert.equal(relativeTime(now + 5_000, now), "just now"); // clock skew
+  assert.equal(relativeTime(now - 10 * 60_000, now), "10m");
+  assert.equal(relativeTime(now - 3 * 3_600_000, now), "3h");
+  assert.equal(relativeTime(new Date(2026, 10, 27, 23, 0).getTime(), now), "yesterday");
+  assert.equal(relativeTime(new Date(2026, 10, 24, 9, 0).getTime(), now), "Nov 24");
+  // 20 h ago but before midnight is "yesterday", not "20h".
+  const morning = new Date(2026, 10, 28, 8, 0).getTime();
+  assert.equal(relativeTime(new Date(2026, 10, 27, 12, 0).getTime(), morning), "yesterday");
+});
+
+test("ux must4: demo and mtproto dialogs carry lastDate (epoch ms)", async () => {
+  const demo = await new DemoPersonal(DEMO_NOW).dialogs();
+  assert.equal(demo.find((c) => c.id === "demo:maya")!.lastDate, DEMO_NOW - 10 * 60000);
+  assert.equal(demo.find((c) => c.id === "demo:crew")!.lastDate, DEMO_NOW - 3 * 60000);
+  const client = {
+    async getDialogs() {
+      return [
+        { id: { toString: () => "1" }, isCommunity: false, title: "Maya", isUser: true, isGroup: false, unreadCount: 1, dialog: {}, message: { message: "hi", date: 1_700_000_000 } },
+        { id: { toString: () => "2" }, isCommunity: false, title: "Empty", isUser: false, isGroup: true, unreadCount: 0, dialog: {} },
+      ];
+    },
+  } as unknown as TelegramClient;
+  const live = await new AccountTelegram(client).dialogs();
+  assert.equal(live[0].lastDate, 1_700_000_000_000);
+  assert.equal(live[1].lastDate, undefined);
+});
+
+test("ux must4: inbox rows show count, short kind and relative time within the lens budgets", async () => {
+  const h = demoHarness();
+  try {
+    await h.app.start();
+    const rows = h.app.frame.split!.rows;
+    assert.deepEqual(rows, ["● Maya · 1", "● Build night · 2", "Design team"]);
+    assert.equal(h.app.frame.split!.heading, "DM · 1 unread · 10m");
+    assert.equal(h.app.frame.split!.detail, "Can you bring the prototype too?");
+    await h.app.input("down");
+    assert.equal(h.app.frame.split!.heading, "Group · 2 unread · 3m");
+    await h.app.input("down");
+    assert.equal(h.app.frame.split!.heading, "Group · up to date · 20m");
+    assert.equal(h.app.frame.badge, "DEMO");
+    for (const label of rows) assert.ok(getTextWidth(label) <= 188, label);
+    assert.ok(getTextWidth(h.app.frame.footer) <= 548);
+  } finally {
+    h.close();
+  }
+});
+
+test("ux must4: long titles are truncated but keep the unread count; headings fit 286 px", () => {
+  const chat = { id: "x", title: "Weekend climbing crew and friends of friends", kind: "group" as const, unread: 12, readMaxId: 0, lastDate: 0 };
+  const label = inboxLabel(chat);
+  assert.match(label, /^● Weekend.*(\.\.\.|…) · 12$/);
+  assert.ok(getTextWidth(label) <= 188);
+  assert.equal(inboxLabel({ ...chat, unread: 250 }).endsWith(" · 99+"), true);
+  const heading = inboxHeading({ ...chat, unread: 0, kind: "channel" }, 0);
+  assert.ok(getTextWidth(heading) <= 286, heading);
+  assert.equal(inboxHeading({ ...chat, unread: 3, lastDate: undefined }, 0), "Group · 3 unread");
+});
+
+test("ux must4: thread context uses relative time and keeps UNREAD until seen; live badge counts unread", async () => {
+  const h = demoHarness();
+  try {
+    await h.app.start();
+    await h.app.input("tap");
+    assert.equal(h.app.frame.context, "Maya · 10m · UNREAD");
+    await h.app.settled();
+    await h.app.input("up");
+    assert.equal(h.app.frame.context, "You · 30m");
+    // A live (non-synthetic) inbox shows total unread instead of DEMO.
+    h.app.synthetic = false;
+    await h.app.home();
+    assert.equal(h.app.frame.badge, "2 UNREAD");
+    const many = (n: number) => [{ id: "a", title: "A", kind: "dm" as const, unread: n, readMaxId: 0 }];
+    assert.equal(unreadBadge(many(0)), undefined);
+    assert.equal(unreadBadge(many(12)), "12 NEW");
+    assert.equal(unreadBadge(many(500)), "99+ NEW");
+    for (const n of [1, 9, 12, 99, 500]) assert.ok(getTextWidth(unreadBadge(many(n))!) <= 95);
+  } finally {
+    h.close();
+  }
+});

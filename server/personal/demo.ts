@@ -82,11 +82,18 @@ export class DemoPersonal implements PersonalProvider {
   }
   async dialogs() {
     const previews = new Map<string, string>();
-    for (const message of this.messages)
+    const last = new Map<string, number>();
+    for (const message of this.messages) {
       previews.set(message.chatId, message.text.slice(0, 160));
+      last.set(
+        message.chatId,
+        Math.max(last.get(message.chatId) ?? 0, message.date),
+      );
+    }
     return this.chats.map((chat) => ({
       ...chat,
       preview: previews.get(chat.id),
+      lastDate: last.get(chat.id),
     }));
   }
   async saved() {

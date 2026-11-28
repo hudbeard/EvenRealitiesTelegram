@@ -39,9 +39,38 @@ type Menu = {
   footer?: string;
 };
 export { wrap } from "./text.js";
-import { fitLine, wrap } from "./text.js";
+import { fitLine, fitWithSuffix, relativeTime, wrap } from "./text.js";
+import { getTextWidth } from "@evenrealities/pretext";
 const short = (s: string, n = 42) =>
   s.length > n ? s.slice(0, n - 1) + "…" : s;
+/** Inbox row label: `● Build night · 2` within the 188 px label column. */
+export function inboxLabel(chat: Chat) {
+  if (!chat.unread) return fitLine(chat.title, 188);
+  const count = chat.unread > 99 ? "99+" : String(chat.unread);
+  return fitWithSuffix("● ", chat.title, " · " + count, 188);
+}
+/**
+ * Live inbox badge: total unread messages. `3 UNREAD` fits the 95 px badge;
+ * two digits do not, so larger totals read `12 NEW` / `99+ NEW`.
+ */
+export function unreadBadge(chats: Chat[]) {
+  const total = chats.reduce((sum, chat) => sum + chat.unread, 0);
+  if (!total) return undefined;
+  const count = total > 99 ? "99+" : String(total);
+  const long = count + " UNREAD";
+  return getTextWidth(long) <= 95 ? long : count + " NEW";
+}
+/** Preview heading: `Group · 2 unread · 5m` within 286 px. */
+export function inboxHeading(chat: Chat, now: number) {
+  const kind =
+    chat.kind === "dm" ? "DM" : chat.kind === "group" ? "Group" : "Channel";
+  const when = chat.lastDate ? relativeTime(chat.lastDate, now) : "";
+  const parts = [kind, chat.unread ? chat.unread + " unread" : "up to date", when];
+  let heading = parts.filter(Boolean).join(" · ");
+  if (getTextWidth(heading) > 286 && !chat.unread)
+    heading = [kind, when].filter(Boolean).join(" · ");
+  return fitLine(heading, 286);
+}
 function replyChoices(source: Source) {
   const time = source.text.match(/\b\d{1,2}:\d{2}(?:\s?[ap]\.?m\.?)?\b/i)?.[0];
   if (/\b(instead|moved to|new plan|rescheduled|update:)\b/i.test(source.text))
@@ -271,18 +300,10 @@ export class GlassesApp {
       "chats",
       [
         ...matches.map((chat) => ({
-          label: (chat.unread ? "● " : "") + chat.title,
-          preview: chat.title,
+          label: inboxLabel(chat),
+          preview: inboxHeading(chat, this.now()),
           chatId: chat.id,
-          detail:
-            (chat.kind === "dm"
-              ? "Direct message"
-              : chat.kind === "group"
-                ? "Group"
-                : "Channel") +
-            " · " +
-            (chat.unread ? chat.unread + " unread" : "Up to date") +
-            (chat.preview ? "\n\n" + chat.preview.replace(/\s+/g, " ") : ""),
+          detail: chat.preview ? chat.preview.replace(/\s+/g, " ") : "",
           run: () =>
             this.openChat(chat, "", undefined, undefined, () =>
               backToList(chat.id),
@@ -343,7 +364,11 @@ export class GlassesApp {
         matches.findIndex((chat) => chat.id === focusId),
       ),
       {
-        badge: this.synthetic ? "DEMO" : undefined,
+        badge: this.synthetic
+          ? "DEMO"
+          : !filter && !unreadOnly
+            ? unreadBadge(this.chats)
+            : undefined,
         context: filter
           ? "“" + short(filter, 30) + "” · " + matches.length + " found"
           : undefined,
@@ -467,10 +492,7 @@ export class GlassesApp {
       });
       return;
     }
-    const date = new Date(m.date).toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    const date = relativeTime(m.date, this.now());
     const lines = this.messageLines(m);
     const original = this.messages.find((parent) => parent.id === m.replyTo);
     const action =

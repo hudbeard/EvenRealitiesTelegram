@@ -79,6 +79,8 @@ export class AccountTelegram implements PersonalProvider {
         kind: d.isUser ? "dm" : d.isGroup ? "group" : "channel",
         unread: d.unreadCount,
         preview: d.message?.message?.trim().slice(0, 160),
+        // Telegram dates are seconds; the lens works in epoch ms.
+        lastDate: d.message?.date ? d.message.date * 1000 : undefined,
         readMaxId: d.dialog instanceof Api.Dialog ? d.dialog.readInboxMaxId : 0,
       }));
   }

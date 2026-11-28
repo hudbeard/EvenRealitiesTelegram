@@ -5,6 +5,8 @@ export type Chat = {
   unread: number;
   readMaxId: number;
   preview?: string;
+  /** Epoch ms of the last message (inbox relative time). */
+  lastDate?: number;
 };
 export type Message = {
   id: number;

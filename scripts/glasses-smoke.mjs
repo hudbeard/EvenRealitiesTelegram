@@ -81,6 +81,10 @@ async function confirmReviewed() {
   await delay(1100);
   return tap();
 }
+/** The focused inbox row label, e.g. "● Maya · 1". */
+function focusedRow(current) {
+  return current.split.rows[current.split.index];
+}
 async function choose(label) {
   for (let i = 0; i < 130; i++) {
     const current = await frame();
@@ -88,7 +92,7 @@ async function choose(label) {
       current.split,
       "Expected a split menu at " + current.title + " when choosing " + label,
     );
-    if (current.split.rows[current.split.index]?.replace(/^● /, "") === label) {
+    if (current.split.rows[current.split.index]?.replace(/^● /, "").replace(/ · \d+\+?$/, "") === label) {
       await tap();
       return;
     }
@@ -151,13 +155,13 @@ assert.equal(
   "Start a fresh simulator at Chats.",
 );
 assert.equal((await frame()).badge, "DEMO");
-assert.equal((await frame()).split.heading, "Maya");
+assert.match(focusedRow(await frame()), /^● Maya · 1$|^Maya$/);
 await shot("01-inbox");
 await gesture("down");
-assert.equal((await frame()).split.heading, "Build night");
+assert.match(focusedRow(await frame()), /Build night/);
 await shot("02-inbox-scrolled");
 await gesture("up");
-assert.equal((await frame()).split.heading, "Maya");
+assert.match(focusedRow(await frame()), /^● Maya · 1$|^Maya$/);
 const scrolls = (await request(sim + "/api/console")).entries.filter(
   (entry) =>
     entry.message.includes("EvenHub event:") &&
@@ -219,7 +223,7 @@ assert.match((await frame()).footer, /Tap  Save now/);
 await confirmReviewed();
 assert.match((await frame()).context, /Demo Saved/);
 await back();
-assert.equal((await frame()).split.heading, "Maya");
+assert.match(focusedRow(await frame()), /^● Maya · 1$|^Maya$/);
 await shortcut("Saved Messages");
 assert.equal((await frame()).title, "Saved Messages");
 assert.match((await frame()).body, new RegExp(chosen.slice(0, 12)));
