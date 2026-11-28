@@ -20,17 +20,31 @@ export class AccountTelegram implements PersonalProvider {
     return peer;
   }
   constructor(private client: TelegramClient) {}
-  static async connect() {
+  static credentials() {
     const apiId = Number(process.env.TELEGRAM_API_ID),
-      apiHash = process.env.TELEGRAM_API_HASH;
-    if (!Number.isInteger(apiId) || apiId <= 0 || !apiHash)
+      apiHash = process.env.TELEGRAM_API_HASH ?? "";
+    return { apiId, apiHash, ok: Number.isInteger(apiId) && apiId > 0 && !!apiHash };
+  }
+  static sessionFile() {
+    return process.env.TELEGRAM_SESSION_FILE ?? ".data/personal.session";
+  }
+  /** Saved session string, or null when no session file exists yet. */
+  static async readSession(path = AccountTelegram.sessionFile()) {
+    try {
+      const session = (await readFile(path, "utf8")).trim();
+      return session || null;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw e;
+    }
+  }
+  /** Connect with a session string; throws if Telegram does not accept it. */
+  static async fromSession(session: string) {
+    const { apiId, apiHash, ok } = AccountTelegram.credentials();
+    if (!ok)
       throw new Error(
-        "Set your own TELEGRAM_API_ID and TELEGRAM_API_HASH, then run personal:login.",
+        "Set your own TELEGRAM_API_ID and TELEGRAM_API_HASH first.",
       );
-    const session = await readFile(
-      process.env.TELEGRAM_SESSION_FILE ?? ".data/personal.session",
-      "utf8",
-    );
     const client = new TelegramClient(
       new StringSession(session.trim()),
       apiId,
@@ -42,10 +56,16 @@ export class AccountTelegram implements PersonalProvider {
     if (!(await client.checkAuthorization())) {
       await client.disconnect();
       throw new Error(
-        "Telegram session is not authorized. Run personal:login yourself.",
+        "Telegram session is not authorized. Sign in again at /login.",
       );
     }
     return new AccountTelegram(client);
+  }
+  static async connect() {
+    const session = await AccountTelegram.readSession();
+    if (!session)
+      throw new Error("No Telegram session yet. Sign in at /login.");
+    return AccountTelegram.fromSession(session);
   }
   async dialogs(): Promise<Chat[]> {
     const rows = await this.client.getDialogs({ limit: 100 });

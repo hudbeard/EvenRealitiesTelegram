@@ -10,20 +10,33 @@ import { AccountTelegram } from "./mtproto.js";
 import { transcribe } from "./speech.js";
 import { suggestReplies } from "./reply-suggestions.js";
 import {
-  startQRLogin,
-  checkQRLogin,
-  submitQRPassword,
-  simulateQRScan,
-  startPhoneLogin,
-  verifyPhoneCode,
-  verifyPhonePassword,
+  DemoClient,
+  LoginManager,
+  teleprotoLoginClient,
+  writeFileAtomic,
 } from "./login.js";
+import { loginRoutes } from "./login-routes.js";
+import { SignedOutProvider, SwitchableProvider } from "./switchable.js";
 const demo = process.argv.includes("--demo"),
   port = Number(process.env.PERSONAL_PORT ?? 3003),
   origin = process.env.PERSONAL_ORIGIN ?? `http://127.0.0.1:${port}`;
 await mkdir(".data", { recursive: true });
 const store = new Store(`.data/personal-${demo ? "demo" : "account"}.sqlite`);
-const provider = demo ? new DemoPersonal() : await AccountTelegram.connect();
+async function initialProvider() {
+  if (demo) return new DemoPersonal();
+  const session = await AccountTelegram.readSession();
+  if (!session) {
+    console.log("No Telegram session yet. Sign in at /login.");
+    return new SignedOutProvider();
+  }
+  try {
+    return await AccountTelegram.fromSession(session);
+  } catch (e) {
+    console.log(`Telegram session not usable (${(e as Error).message}). Sign in at /login.`);
+    return new SignedOutProvider();
+  }
+}
+const provider = new SwitchableProvider(await initialProvider());
 const service = new PersonalService(store, provider);
 if (demo && !service.watched().length)
   await service.select(["demo:maya", "demo:crew", "demo:design"]);
@@ -40,85 +53,30 @@ const approval = await readFile(keyPath, "utf8");
 const app = express();
 app.disable("x-powered-by");
 app.use(express.json({ limit: "16kb" }));
-// Serve login page
+// Telegram sign-in page (QR, phone code, 2FA).
 app.get("/login", (_req, res) => {
   res.sendFile(resolve("public/login.html"));
 });
-
-// Login endpoints (no auth required)
-const apiId = Number(process.env.TELEGRAM_API_ID ?? 0);
-const apiHash = process.env.TELEGRAM_API_HASH ?? "";
-const sessionFile = process.env.TELEGRAM_SESSION_FILE ?? ".data/personal.session";
-
-app.post("/api/login/qr/start", async (_req, res) => {
-  try {
-    const result = await startQRLogin(apiId, apiHash, demo);
-    res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+const credentials = AccountTelegram.credentials();
+const sessionFile = AccountTelegram.sessionFile();
+const logins = new LoginManager({
+  apiId: credentials.apiId,
+  apiHash: credentials.apiHash,
+  demo,
+  createClient: () =>
+    demo
+      ? new DemoClient()
+      : teleprotoLoginClient(credentials.apiId, credentials.apiHash),
+  // Demo never writes a session file (LoginAttempt skips persist in demo).
+  persist: demo
+    ? async () => {
+        throw new Error("Demo mode never writes a session file.");
+      }
+    : (session) => writeFileAtomic(sessionFile, session),
+  // Hot pick-up: the running server switches to the new account at once.
+  onAuthorized: async (session) =>
+    provider.swap(await AccountTelegram.fromSession(session)),
 });
-
-app.post("/api/login/qr/check", async (req, res) => {
-  try {
-    const { sessionId } = req.body;
-    const result = await checkQRLogin(sessionId, demo);
-    res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post("/api/login/qr/password", async (req, res) => {
-  try {
-    const { sessionId, password } = req.body;
-    const result = await submitQRPassword(sessionId, password, sessionFile, demo);
-    res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post("/api/login/qr/simulate-scan", async (req, res) => {
-  try {
-    const { sessionId } = req.body;
-    await simulateQRScan(sessionId);
-    res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post("/api/login/phone/send-code", async (req, res) => {
-  try {
-    const { phone } = req.body;
-    const result = await startPhoneLogin(apiId, apiHash, phone, demo);
-    res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post("/api/login/phone/verify-code", async (req, res) => {
-  try {
-    const { sessionId, code } = req.body;
-    const result = await verifyPhoneCode(sessionId, code, demo);
-    res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post("/api/login/phone/password", async (req, res) => {
-  try {
-    const { sessionId, password } = req.body;
-    const result = await verifyPhonePassword(sessionId, password, sessionFile, demo);
-    res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 app.use("/api", (req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("X-Content-Type-Options", "nosniff");
@@ -141,6 +99,8 @@ app.use("/api", (req, res, next) => {
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
 });
+// Login endpoints: origin-checked and rate-limited, no display token needed.
+app.use("/api", loginRoutes(logins));
 let pairAttempts = 0,
   windowEnd = Date.now() + 60000;
 app.post("/api/pair", (req, res) => {
@@ -173,7 +133,8 @@ app.get("/api/health", (_req, res) =>
     replyIdeasEnabled: !!(
       process.env.REPLY_AI_URL && process.env.REPLY_AI_MODEL
     ),
-    qrLoginAvailable: !demo && !!process.env.TELEGRAM_API_ID && !!process.env.TELEGRAM_API_HASH,
+    qrLoginAvailable: logins.available,
+    telegramSignedIn: demo || provider.signedIn,
   }),
 );
 
@@ -346,7 +307,8 @@ const server = app.listen(port, process.env.PERSONAL_HOST ?? "127.0.0.1", () =>
   ),
 );
 const close = () =>
-  server.close(() => {
+  server.close(async () => {
+    await logins.cancelAll();
     void provider.close().finally(() => {
       store.close();
       process.exit(0);
